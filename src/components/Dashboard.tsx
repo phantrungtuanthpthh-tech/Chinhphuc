@@ -35,11 +35,22 @@ type View = 'questions' | 'categories' | 'matches' | 'users' | 'notifications';
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [activeView, setActiveView] = useState<View>('questions');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [latestNotification, setLatestNotification] = useState<Notification | null>(null);
 
   useEffect(() => {
     fetchLatestNotification();
+    
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const fetchLatestNotification = async () => {
@@ -64,12 +75,23 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(user.role));
 
   return (
-    <div className="min-h-screen bg-pastel-blue flex font-sans text-[#1E293B]">
+    <div className="min-h-screen bg-pastel-blue flex font-sans text-[#1E293B] relative overflow-hidden">
+      {/* Sidebar Backdrop (Mobile only) */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-accent-purple/20 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside 
         className={cn(
-          "bg-white border-r border-pastel-purple-dark transition-all duration-300 flex flex-col shadow-lg",
-          isSidebarOpen ? "w-64" : "w-20"
+          "bg-white border-r border-pastel-purple-dark transition-all duration-300 flex flex-col shadow-lg z-50",
+          "fixed md:relative inset-y-0 left-0",
+          isSidebarOpen 
+            ? "translate-x-0 w-64" 
+            : "-translate-x-full md:translate-x-0 md:w-20"
         )}
       >
         <div className="p-6 flex items-center gap-3 border-b border-pastel-purple-dark">
@@ -125,10 +147,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Bar / Notification */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-pastel-blue-dark h-16 flex items-center px-8 shrink-0">
+        <header className="bg-white/80 backdrop-blur-md border-b border-pastel-blue-dark h-16 flex items-center px-4 md:px-8 shrink-0">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="mr-6 p-2 hover:bg-pastel-blue rounded-xl transition-colors text-accent-blue"
+            className="mr-4 md:mr-6 p-2 hover:bg-pastel-blue rounded-xl transition-colors text-accent-blue"
           >
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -157,7 +179,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto">
             {activeView === 'questions' && <QuestionBank user={user} />}
             {activeView === 'categories' && <CategoryManager user={user} />}
