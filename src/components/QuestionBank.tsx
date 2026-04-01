@@ -27,6 +27,7 @@ interface QuestionBankProps {
 export default function QuestionBank({ user }: QuestionBankProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -50,14 +51,15 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [qRes, cRes] = await Promise.all([
+    const [qRes, cRes, mRes] = await Promise.all([
       supabase.from('questions').select(`
         *,
         categories(name),
         creator:profiles!created_by(full_name),
         editor:profiles!last_edited_by(full_name)
       `).order('created_at', { ascending: false }),
-      supabase.from('categories').select('*')
+      supabase.from('categories').select('*'),
+      supabase.from('matches').select('id, name, is_published')
     ]);
 
     if (qRes.data) setQuestions(qRes.data);
@@ -65,6 +67,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
       setCategories(cRes.data);
       if (cRes.data.length > 0) setFormData(prev => ({ ...prev, category_id: cRes.data[0].id }));
     }
+    if (mRes.data) setMatches(mRes.data);
     setLoading(false);
   };
 
@@ -101,18 +104,28 @@ export default function QuestionBank({ user }: QuestionBankProps) {
   };
 
   const exportToExcel = () => {
-    const data = filteredQuestions.map((q, idx) => ({
-      'STT': idx + 1,
-      'Lĩnh vực': (q as any).categories?.name,
-      'Mức độ': q.difficulty,
-      'Nội dung': q.content,
-      'Đáp án': q.answer,
-      'Link Media': q.media_link || '',
-      'Người tạo': (q as any).creator?.full_name || 'N/A',
-      'Người sửa cuối': (q as any).editor?.full_name || 'N/A',
-      'Các trận đấu đã dùng': q.used_match_ids.join(', '),
-      'Ngày tạo': new Date(q.created_at).toLocaleString('vi-VN')
-    }));
+    const data = filteredQuestions.map((q, idx) => {
+      const usedMatchNames = q.used_match_ids
+        .map(mid => {
+          const match = matches.find(m => m.id === mid);
+          return (match && match.is_published) ? match.name : null;
+        })
+        .filter(Boolean)
+        .join(', ');
+
+      return {
+        'STT': idx + 1,
+        'Lĩnh vực': (q as any).categories?.name,
+        'Mức độ': q.difficulty,
+        'Nội dung': q.content,
+        'Đáp án': q.answer,
+        'Link Media': q.media_link || '',
+        'Người tạo': (q as any).creator?.full_name || 'N/A',
+        'Người sửa cuối': (q as any).editor?.full_name || 'N/A',
+        'Các trận đấu đã dùng': usedMatchNames || 'Chưa sử dụng',
+        'Ngày tạo': new Date(q.created_at).toLocaleString('vi-VN')
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -287,9 +300,19 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                   {q.used_match_ids.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       <span className="md:hidden mr-1">Đã dùng:</span>
-                      {q.used_match_ids.map(mid => (
-                        <span key={mid} className="underline cursor-help hover:text-accent-blue transition-colors">Trận {mid.slice(0, 4)}</span>
-                      ))}
+                      {q.used_match_ids.map(mid => {
+                        const match = matches.find(m => m.id === mid);
+                        if (!match || !match.is_published) return null;
+                        return (
+                          <span key={mid} className="underline cursor-help hover:text-accent-blue transition-colors" title={match.name}>
+                            {match.name.length > 10 ? match.name.slice(0, 10) + '...' : match.name}
+                          </span>
+                        );
+                      }).filter(Boolean)}
+                      {q.used_match_ids.every(mid => {
+                        const match = matches.find(m => m.id === mid);
+                        return !match || !match.is_published;
+                      }) && <span className="italic">Chưa sử dụng</span>}
                     </div>
                   ) : (
                     <span className="italic md:not-italic"><span className="md:hidden">Chưa sử dụng</span><span className="hidden md:inline">Chưa sử dụng</span></span>
