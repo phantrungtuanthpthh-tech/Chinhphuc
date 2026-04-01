@@ -25,6 +25,7 @@ import CategoryManager from './CategoryManager';
 import MatchManager from './MatchManager';
 import UserManager from './UserManager';
 import NotificationCenter from './NotificationCenter';
+import ChangePasswordModal from './ChangePasswordModal';
 
 interface DashboardProps {
   user: Profile;
@@ -37,6 +38,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [activeView, setActiveView] = useState<View>('questions');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [latestNotification, setLatestNotification] = useState<Notification | null>(null);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     fetchLatestNotification();
@@ -134,13 +136,22 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               </div>
             )}
           </div>
-          <button 
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-[#64748B] hover:text-red-500 transition-colors"
-          >
-            <LogOut size={20} />
-            {isSidebarOpen && <span className="text-sm font-medium">Đăng xuất</span>}
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => setIsChangePasswordOpen(true)}
+              className="w-full flex items-center gap-3 px-3 py-2 text-[#64748B] hover:text-accent-purple transition-colors"
+            >
+              <Settings size={20} />
+              {isSidebarOpen && <span className="text-sm font-medium">Đổi mật khẩu</span>}
+            </button>
+            <button 
+              onClick={onLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 text-[#64748B] hover:text-red-500 transition-colors"
+            >
+              <LogOut size={20} />
+              {isSidebarOpen && <span className="text-sm font-medium">Đăng xuất</span>}
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -189,6 +200,13 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </div>
       </main>
+
+      {isChangePasswordOpen && (
+        <ChangePasswordModal 
+          user={user} 
+          onClose={() => setIsChangePasswordOpen(false)} 
+        />
+      )}
     </div>
   );
 }
