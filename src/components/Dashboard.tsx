@@ -64,19 +64,19 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(user.role));
 
   return (
-    <div className="min-h-screen bg-[#E4E3E0] flex font-sans text-[#141414]">
+    <div className="min-h-screen bg-pastel-blue flex font-sans text-[#1E293B]">
       {/* Sidebar */}
       <aside 
         className={cn(
-          "bg-[#141414] text-[#E4E3E0] transition-all duration-300 flex flex-col",
+          "bg-white border-r border-pastel-purple-dark transition-all duration-300 flex flex-col shadow-lg",
           isSidebarOpen ? "w-64" : "w-20"
         )}
       >
-        <div className="p-6 flex items-center gap-3 border-b border-[#E4E3E0]/10">
-          <div className="w-8 h-8 bg-[#E4E3E0] rounded flex items-center justify-center text-[#141414]">
+        <div className="p-6 flex items-center gap-3 border-b border-pastel-purple-dark">
+          <div className="w-8 h-8 bg-pastel-purple text-accent-purple rounded-lg flex items-center justify-center shadow-sm">
             <Trophy size={20} />
           </div>
-          {isSidebarOpen && <span className="font-bold tracking-tight uppercase text-sm">Chinh phục</span>}
+          {isSidebarOpen && <span className="font-bold tracking-tight uppercase text-sm text-accent-purple">Chinh phục</span>}
         </div>
 
         <nav className="flex-1 py-6">
@@ -86,23 +86,23 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 <button
                   onClick={() => setActiveView(item.id as View)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-3 rounded transition-colors",
+                    "w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all",
                     activeView === item.id 
-                      ? "bg-[#E4E3E0] text-[#141414]" 
-                      : "hover:bg-[#E4E3E0]/10 text-[#E4E3E0]/60 hover:text-[#E4E3E0]"
+                      ? "bg-pastel-purple text-accent-purple shadow-sm font-bold" 
+                      : "hover:bg-pastel-blue text-[#64748B] hover:text-accent-blue"
                   )}
                 >
                   <item.icon size={20} />
-                  {isSidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
+                  {isSidebarOpen && <span className="text-sm">{item.label}</span>}
                 </button>
               </li>
             ))}
           </ul>
         </nav>
 
-        <div className="p-6 border-t border-[#E4E3E0]/10">
+        <div className="p-6 border-t border-pastel-purple-dark">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-full bg-[#E4E3E0]/20 flex items-center justify-center text-xs font-bold">
+            <div className="w-8 h-8 rounded-full bg-pastel-purple flex items-center justify-center text-xs font-bold text-accent-purple">
               {user.full_name.charAt(0)}
             </div>
             {isSidebarOpen && (
@@ -114,7 +114,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
           <button 
             onClick={onLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-[#E4E3E0]/60 hover:text-red-400 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-[#64748B] hover:text-red-500 transition-colors"
           >
             <LogOut size={20} />
             {isSidebarOpen && <span className="text-sm font-medium">Đăng xuất</span>}
@@ -125,10 +125,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Bar / Notification */}
-        <header className="bg-white border-b border-[#141414]/10 h-16 flex items-center px-8 shrink-0">
+        <header className="bg-white/80 backdrop-blur-md border-b border-pastel-blue-dark h-16 flex items-center px-8 shrink-0">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="mr-6 p-2 hover:bg-[#141414]/5 rounded transition-colors"
+            className="mr-6 p-2 hover:bg-pastel-blue rounded-xl transition-colors text-accent-blue"
           >
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -136,8 +136,8 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           {/* Admin Notification for Editors */}
           <div className="flex-1 flex items-center justify-center">
             {latestNotification && (
-              <div className="bg-[#141414] text-[#E4E3E0] px-6 py-2 rounded-full flex items-center gap-3 max-w-2xl animate-in fade-in slide-in-from-top-4">
-                <Bell size={14} className="text-yellow-400" />
+              <div className="bg-pastel-purple text-accent-purple px-6 py-2 rounded-full flex items-center gap-3 max-w-2xl shadow-sm border border-pastel-purple-dark animate-in fade-in slide-in-from-top-4">
+                <Bell size={14} className="text-accent-purple" />
                 <span className="text-xs font-medium truncate">{latestNotification.content}</span>
                 {latestNotification.link && (
                   <a 

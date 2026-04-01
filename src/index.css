@@ -5,11 +5,18 @@
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'Playfair Display', serif;
   --font-mono: 'JetBrains Mono', monospace;
+  
+  --color-pastel-purple: #F3E8FF;
+  --color-pastel-purple-dark: #D8B4FE;
+  --color-pastel-blue: #E0F2FE;
+  --color-pastel-blue-dark: #BAE6FD;
+  --color-accent-purple: #7E22CE;
+  --color-accent-blue: #0369A1;
 }
 
 @layer base {
   body {
-    @apply bg-[#E4E3E0] text-[#141414] antialiased;
+    @apply bg-pastel-blue text-[#1E293B] antialiased;
   }
 }
 
