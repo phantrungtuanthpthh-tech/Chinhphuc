@@ -94,7 +94,7 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="mt-8 pt-8 border-t border-pastel-purple-dark text-center">
           <p className="text-xs text-[#64748B] uppercase tracking-widest font-bold opacity-40">
-            Hệ thống quản lý ngân hàng câu hỏi
+            Hệ thống quản lý ngân hàng câu hỏi Chinh phục
           </p>
         </div>
       </div>
