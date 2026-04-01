@@ -13,8 +13,11 @@ import {
   MoreVertical,
   HelpCircle,
   FileText,
-  Clock
+  Clock,
+  Download,
+  User
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 
 interface QuestionBankProps {
@@ -47,7 +50,12 @@ export default function QuestionBank({ user }: QuestionBankProps) {
   const fetchData = async () => {
     setLoading(true);
     const [qRes, cRes] = await Promise.all([
-      supabase.from('questions').select('*, categories(name)').order('created_at', { ascending: false }),
+      supabase.from('questions').select(`
+        *,
+        categories(name),
+        creator:profiles!created_by(full_name),
+        editor:profiles!last_edited_by(full_name)
+      `).order('created_at', { ascending: false }),
       supabase.from('categories').select('*')
     ]);
 
@@ -86,6 +94,26 @@ export default function QuestionBank({ user }: QuestionBankProps) {
     }
   };
 
+  const exportToExcel = () => {
+    const data = filteredQuestions.map((q, idx) => ({
+      'STT': idx + 1,
+      'Lĩnh vực': (q as any).categories?.name,
+      'Mức độ': q.difficulty,
+      'Nội dung': q.content,
+      'Đáp án': q.answer,
+      'Link Media': q.media_link || '',
+      'Người tạo': (q as any).creator?.full_name || 'N/A',
+      'Người sửa cuối': (q as any).editor?.full_name || 'N/A',
+      'Các trận đấu đã dùng': q.used_match_ids.join(', '),
+      'Ngày tạo': new Date(q.created_at).toLocaleString('vi-VN')
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "NganHangCauHoi");
+    XLSX.writeFile(wb, `NganHangCauHoi_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const openEdit = (q: Question) => {
     setEditingQuestion(q);
     setFormData({
@@ -116,23 +144,32 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-1 text-accent-purple">Ngân hàng câu hỏi</h2>
-          <p className="text-sm text-[#64748B] italic font-serif">Quản lý và biên tập nội dung câu hỏi cho các trận đấu.</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight mb-1 text-accent-purple">Ngân hàng câu hỏi</h2>
+            <p className="text-sm text-[#64748B] italic font-serif">Quản lý và biên tập nội dung câu hỏi cho các trận đấu.</p>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={exportToExcel}
+              className="bg-accent-blue text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-accent-blue/90 transition-all shadow-lg hover:shadow-xl font-bold"
+            >
+              <Download size={20} />
+              <span>Xuất Excel</span>
+            </button>
+            <button 
+              onClick={() => {
+                setEditingQuestion(null);
+                setFormData({ content: '', answer: '', media_link: '', difficulty: 'Khởi động', category_id: availableCategories[0]?.id || '' });
+                setIsModalOpen(true);
+              }}
+              className="bg-accent-purple text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-accent-purple/90 transition-all shadow-lg hover:shadow-xl font-bold"
+            >
+              <Plus size={20} />
+              <span>Thêm câu hỏi mới</span>
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={() => {
-            setEditingQuestion(null);
-            setFormData({ content: '', answer: '', media_link: '', difficulty: 'Khởi động', category_id: availableCategories[0]?.id || '' });
-            setIsModalOpen(true);
-          }}
-          className="bg-accent-purple text-white px-6 py-3 rounded-full flex items-center gap-2 hover:bg-accent-purple/90 transition-all shadow-lg hover:shadow-xl font-bold"
-        >
-          <Plus size={20} />
-          <span>Thêm câu hỏi mới</span>
-        </button>
-      </div>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-2xl border border-pastel-purple-dark shadow-sm">
@@ -174,10 +211,11 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
       {/* Question List */}
       <div className="bg-white rounded-2xl border border-pastel-purple-dark shadow-sm overflow-hidden">
-        <div className="grid grid-cols-[40px_1.5fr_1fr_1fr_100px] p-4 border-b border-pastel-purple-dark bg-pastel-purple/20 text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">
+        <div className="grid grid-cols-[40px_1.5fr_1fr_1fr_1fr_100px] p-4 border-b border-pastel-purple-dark bg-pastel-purple/20 text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">
           <div>#</div>
           <div>Nội dung câu hỏi</div>
           <div>Lĩnh vực & Mức độ</div>
+          <div>Người tạo/Sửa</div>
           <div>Trận đấu đã dùng</div>
           <div className="text-right">Thao tác</div>
         </div>
@@ -189,7 +227,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
         ) : (
           <div className="divide-y divide-pastel-purple-dark/30">
             {filteredQuestions.map((q, idx) => (
-              <div key={q.id} className="grid grid-cols-[40px_1.5fr_1fr_1fr_100px] p-4 hover:bg-pastel-blue/20 transition-colors items-center group">
+              <div key={q.id} className="grid grid-cols-[40px_1.5fr_1fr_1fr_1fr_100px] p-4 hover:bg-pastel-blue/20 transition-colors items-center group">
                 <div className="text-[10px] font-mono text-[#64748B] opacity-40">{idx + 1}</div>
                 <div className="pr-4">
                   <p className="text-sm font-medium line-clamp-2 mb-1 text-[#1E293B]">{q.content}</p>
@@ -209,6 +247,16 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                     )}>
                       {q.difficulty}
                     </span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-[#64748B] opacity-60 flex flex-col gap-1">
+                  <div className="flex items-center gap-1">
+                    <User size={10} className="text-accent-purple" />
+                    <span className="truncate max-w-[120px]">Tạo: {(q as any).creator?.full_name || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Edit2 size={10} className="text-accent-blue" />
+                    <span className="truncate max-w-[120px]">Sửa: {(q as any).editor?.full_name || 'N/A'}</span>
                   </div>
                 </div>
                 <div className="text-[10px] text-[#64748B] opacity-60">
