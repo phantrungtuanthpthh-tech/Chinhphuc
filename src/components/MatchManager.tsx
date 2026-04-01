@@ -215,7 +215,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
     // Ve dich Full
     match.matrix.ve_dich_full.contestants.forEach(c => {
       c.question_ids.forEach((qid, idx) => {
-        const diff = idx < 3 ? '10đ' : idx < 6 ? '20đ' : '10đ';
+        const diff = idx < 3 ? '10đ' : idx < 6 ? '20đ' : '30đ';
         addQuestionToExport(qid, `Về đích Full - Thí sinh ${c.contestant_id} Câu ${idx + 1} (${diff})`);
       });
     });
@@ -244,8 +244,8 @@ export default function MatchManager({ user }: MatchManagerProps) {
       difficulty = '20 điểm';
     } else if (section === 've_dich_full') {
       categoryId = matrix.ve_dich_full.contestants[contestantIdx!].category_ids[index];
-      // 3x10, 3x20, 3x10
-      difficulty = index < 3 ? '10 điểm' : index < 6 ? '20 điểm' : '10 điểm';
+      // 3x10, 3x20, 3x30
+      difficulty = index < 3 ? '10 điểm' : index < 6 ? '20 điểm' : '30 điểm';
     }
 
     const query = supabase.from('questions').select('*');
@@ -481,9 +481,9 @@ export default function MatchManager({ user }: MatchManagerProps) {
                       <div key={qIdx} className="space-y-2">
                         <div className={cn(
                           "text-[8px] text-center font-bold uppercase",
-                          qIdx < 3 || qIdx >= 6 ? "text-green-600" : "text-yellow-600"
+                          qIdx < 3 ? "text-green-600" : qIdx < 6 ? "text-yellow-600" : "text-red-600"
                         )}>
-                          {qIdx < 3 || qIdx >= 6 ? "10đ" : "20đ"}
+                          {qIdx < 3 ? "10đ" : qIdx < 6 ? "20đ" : "30đ"}
                         </div>
                         <select 
                           value={catId}
