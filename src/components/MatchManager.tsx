@@ -48,6 +48,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
   const [step, setStep] = useState<1 | 2>(1); // 1: Matrix, 2: Selection
   const [matchName, setMatchName] = useState('');
   const [matrix, setMatrix] = useState<MatchMatrix>(INITIAL_MATRIX);
+  const [questionsMap, setQuestionsMap] = useState<Record<string, Question>>({});
   
   // Selection state
   const [activeSlot, setActiveSlot] = useState<{ section: string; index: number; contestantIdx?: number } | null>(null);
@@ -67,6 +68,24 @@ export default function MatchManager({ user }: MatchManagerProps) {
     if (mRes.data) setMatches(mRes.data);
     if (cRes.data) setCategories(cRes.data);
     setLoading(false);
+  };
+
+  const fetchQuestionsForMatrix = async (m: MatchMatrix) => {
+    const ids = extractAllQuestionIds(m);
+    if (ids.length === 0) return;
+
+    const { data } = await supabase
+      .from('questions')
+      .select('*, categories(name)')
+      .in('id', ids);
+
+    if (data) {
+      const map: Record<string, Question> = {};
+      data.forEach(q => {
+        map[q.id] = q;
+      });
+      setQuestionsMap(prev => ({ ...prev, ...map }));
+    }
   };
 
   const handleSaveMatch = async () => {
@@ -100,6 +119,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
     setEditingMatch(match);
     setMatchName(match.name);
     setMatrix(match.matrix);
+    fetchQuestionsForMatrix(match.matrix);
     setIsCreating(false);
   };
 
@@ -150,22 +170,60 @@ export default function MatchManager({ user }: MatchManagerProps) {
     return { total, filled, percentage };
   };
 
-  const handleExportExcel = (match: Match) => {
-    const data: any[] = [];
-    // Add Khoi Dong
-    data.push(["PHẦN KHỞI ĐỘNG"]);
+  const handleExportExcel = async (match: Match) => {
+    const ids = extractAllQuestionIds(match.matrix);
+    const { data: questions } = await supabase
+      .from('questions')
+      .select('*, categories(name)')
+      .in('id', ids);
+
+    const qMap: Record<string, Question> = {};
+    questions?.forEach(q => { qMap[q.id] = q; });
+
+    const exportData: any[] = [];
+    
+    const addQuestionToExport = (qid: string, label: string) => {
+      const q = qMap[qid] as any;
+      exportData.push({
+        'Phần thi': label.split(' - ')[0],
+        'Vị trí': label.split(' - ')[1],
+        'Lĩnh vực': q?.categories?.name || 'N/A',
+        'Mức độ': q?.difficulty || 'N/A',
+        'Nội dung câu hỏi': q?.content || 'Chưa chọn',
+        'Đáp án': q?.answer || 'N/A',
+        'Link media': q?.media_link || ''
+      });
+    };
+
+    // Khoi dong Private
     match.matrix.khoi_dong.private.forEach(c => {
-      data.push([`Thí sinh ${c.contestant_id}`]);
       c.question_ids.forEach((qid, idx) => {
-        data.push([`Câu ${idx + 1}`, qid || "Chưa chọn"]);
+        addQuestionToExport(qid, `Khởi động - Thí sinh ${c.contestant_id} Câu ${idx + 1}`);
       });
     });
-    // ... add more sections ...
-    
-    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Khoi dong Common
+    match.matrix.khoi_dong.common.question_ids.forEach((qid, idx) => {
+      addQuestionToExport(qid, `Khởi động - Chung Câu ${idx + 1}`);
+    });
+
+    // Ve dich
+    match.matrix.ve_dich.question_ids.forEach((qid, idx) => {
+      addQuestionToExport(qid, `Về đích - Câu ${idx + 1}`);
+    });
+
+    // Ve dich Full
+    match.matrix.ve_dich_full.contestants.forEach(c => {
+      c.question_ids.forEach((qid, idx) => {
+        const diff = idx < 3 ? '10đ' : idx < 6 ? '20đ' : '10đ';
+        addQuestionToExport(qid, `Về đích Full - Thí sinh ${c.contestant_id} Câu ${idx + 1} (${diff})`);
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Trận đấu");
-    XLSX.writeFile(wb, `${match.name}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "NganHangCauHoi");
+    XLSX.writeFile(wb, `${match.name}_Full_78_Cau.xlsx`);
   };
 
   const openSelection = async (section: string, index: number, contestantIdx?: number) => {
@@ -215,6 +273,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
     }
 
     setMatrix(newMatrix);
+    setQuestionsMap(prev => ({ ...prev, [q.id]: q }));
     setActiveSlot(null);
   };
 
@@ -330,11 +389,12 @@ export default function MatchManager({ user }: MatchManagerProps) {
                         <button 
                           onClick={() => openSelection('khoi_dong_private', qIdx, cIdx)}
                           className={cn(
-                            "w-full py-2 rounded-lg text-[10px] font-bold border transition-all",
+                            "w-full py-2 px-2 rounded-lg text-[10px] font-bold border transition-all truncate",
                             c.question_ids[qIdx] ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-pastel-purple-dark text-[#64748B] hover:border-accent-purple"
                           )}
+                          title={c.question_ids[qIdx] ? questionsMap[c.question_ids[qIdx]]?.content : "Chọn câu"}
                         >
-                          {c.question_ids[qIdx] ? "Đã chọn" : "Chọn câu"}
+                          {c.question_ids[qIdx] ? (questionsMap[c.question_ids[qIdx]]?.content || "Đã chọn") : "Chọn câu"}
                         </button>
                       </div>
                     ))}
@@ -358,11 +418,12 @@ export default function MatchManager({ user }: MatchManagerProps) {
                       <button 
                         onClick={() => openSelection('khoi_dong_common', qIdx)}
                         className={cn(
-                          "w-full py-2 rounded-lg text-[10px] font-bold border transition-all",
+                          "w-full py-2 px-2 rounded-lg text-[10px] font-bold border transition-all truncate",
                           matrix.khoi_dong.common.question_ids[qIdx] ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-pastel-purple-dark text-[#64748B] hover:border-accent-purple"
                         )}
+                        title={matrix.khoi_dong.common.question_ids[qIdx] ? questionsMap[matrix.khoi_dong.common.question_ids[qIdx]]?.content : "Chọn câu"}
                       >
-                        {matrix.khoi_dong.common.question_ids[qIdx] ? "Đã chọn" : "Chọn câu"}
+                        {matrix.khoi_dong.common.question_ids[qIdx] ? (questionsMap[matrix.khoi_dong.common.question_ids[qIdx]]?.content || "Đã chọn") : "Chọn câu"}
                       </button>
                     </div>
                   ))}
@@ -392,11 +453,12 @@ export default function MatchManager({ user }: MatchManagerProps) {
                   <button 
                     onClick={() => openSelection('ve_dich', qIdx)}
                     className={cn(
-                      "w-full py-2 rounded-lg text-[10px] font-bold border transition-all",
+                      "w-full py-2 px-2 rounded-lg text-[10px] font-bold border transition-all truncate",
                       matrix.ve_dich.question_ids[qIdx] ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-pastel-purple-dark text-[#64748B] hover:border-accent-purple"
                     )}
+                    title={matrix.ve_dich.question_ids[qIdx] ? questionsMap[matrix.ve_dich.question_ids[qIdx]]?.content : "Chọn câu"}
                   >
-                    {matrix.ve_dich.question_ids[qIdx] ? "Đã chọn" : "Chọn câu"}
+                    {matrix.ve_dich.question_ids[qIdx] ? (questionsMap[matrix.ve_dich.question_ids[qIdx]]?.content || "Đã chọn") : "Chọn câu"}
                   </button>
                 </div>
               ))}
@@ -434,11 +496,12 @@ export default function MatchManager({ user }: MatchManagerProps) {
                         <button 
                           onClick={() => openSelection('ve_dich_full', qIdx, cIdx)}
                           className={cn(
-                            "w-full py-1 rounded text-[8px] font-bold border transition-all",
+                            "w-full py-1 px-1 rounded text-[8px] font-bold border transition-all truncate",
                             c.question_ids[qIdx] ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-pastel-purple-dark text-[#64748B] hover:border-accent-purple"
                           )}
+                          title={c.question_ids[qIdx] ? questionsMap[c.question_ids[qIdx]]?.content : "Chọn"}
                         >
-                          {c.question_ids[qIdx] ? "Đã chọn" : "Chọn"}
+                          {c.question_ids[qIdx] ? (questionsMap[c.question_ids[qIdx]]?.content || "Đã chọn") : "Chọn"}
                         </button>
                       </div>
                     ))}
