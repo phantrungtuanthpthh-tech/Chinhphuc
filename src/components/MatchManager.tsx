@@ -134,15 +134,26 @@ export default function MatchManager({ user }: MatchManagerProps) {
     const newStatus = !match.is_published;
     const { error } = await supabase.from('matches').update({ is_published: newStatus }).eq('id', match.id);
     if (!error) {
+      const questionIds = extractAllQuestionIds(match.matrix);
       // If publishing, update questions with this match ID
       if (newStatus) {
-        const questionIds = extractAllQuestionIds(match.matrix);
-        // This is a simplified update, in production you'd use a RPC or multiple updates
         for (const qid of questionIds) {
           if (qid) {
             const { data: q } = await supabase.from('questions').select('used_match_ids').eq('id', qid).single();
             if (q && !q.used_match_ids.includes(match.id)) {
               await supabase.from('questions').update({ used_match_ids: [...q.used_match_ids, match.id] }).eq('id', qid);
+            }
+          }
+        }
+      } else {
+        // If unpublishing, remove this match ID from questions
+        for (const qid of questionIds) {
+          if (qid) {
+            const { data: q } = await supabase.from('questions').select('used_match_ids').eq('id', qid).single();
+            if (q && q.used_match_ids.includes(match.id)) {
+              await supabase.from('questions').update({ 
+                used_match_ids: q.used_match_ids.filter(id => id !== match.id) 
+              }).eq('id', qid);
             }
           }
         }
