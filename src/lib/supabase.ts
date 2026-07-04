@@ -52,22 +52,39 @@ export const getFirestoreInstance = () => {
   return db;
 };
 
+export const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMsg)), timeoutMs)
+    )
+  ]);
+};
+
 // Auto-seed a default owner if database is completely empty
 let isSeeded = false;
 export const seedDefaultOwner = async () => {
   if (isSeeded) return;
   try {
     const firestore = getFirestoreInstance();
-    const snap = await getDocs(collection(firestore, 'profiles'));
+    const snap = await withTimeout(
+      getDocs(collection(firestore, 'profiles')),
+      5000,
+      'Không thể kết nối đến Firestore để kiểm tra dữ liệu gốc (quá thời gian).'
+    );
     if (snap.empty) {
-      await setDoc(doc(firestore, 'profiles', 'admin_default'), {
-        username: 'admin',
-        password: 'adminpassword',
-        full_name: 'Administrator',
-        role: 'owner',
-        assigned_category_ids: [],
-        created_at: new Date().toISOString()
-      });
+      await withTimeout(
+        setDoc(doc(firestore, 'profiles', 'admin_default'), {
+          username: 'admin',
+          password: 'adminpassword',
+          full_name: 'Administrator',
+          role: 'owner',
+          assigned_category_ids: [],
+          created_at: new Date().toISOString()
+        }),
+        4000,
+        'Không thể thiết lập tài khoản admin mặc định.'
+      );
       console.log('Seeded default owner: admin / adminpassword');
     }
     isSeeded = true;
@@ -345,16 +362,31 @@ class SupabaseQueryBuilder {
   }
 
   async execute() {
-    if (this.action === 'select') {
-      return this.executeSelect();
-    } else if (this.action === 'insert') {
-      return this.executeInsert();
-    } else if (this.action === 'update') {
-      return this.executeUpdate();
-    } else if (this.action === 'delete') {
-      return this.executeDelete();
+    const errorMsg = 
+      `Thao tác với Firebase Firestore đã quá thời gian chờ (8 giây).\n\n` +
+      `Điều này hầu như luôn xảy ra do một trong hai nguyên nhân chính sau:\n` +
+      `1. BẠN CHƯA KHỞI TẠO BẢNG CƠ SỞ DỮ LIỆU TRÊN FIREBASE: Bạn đã tạo dự án Firebase nhưng CHƯA nhấn nút "Create database" (Tạo cơ sở dữ liệu) cho Cloud Firestore trong bảng điều khiển Firebase Console. Vui lòng vào trang Firebase Console -> Dự án của bạn -> Firestore Database -> Click nút "Create database" và chọn "Start in test mode" hoặc "Production mode" thì ứng dụng mới kết nối thành công.\n` +
+      `2. CẤU HÌNH SAI BIẾN MÔI TRƯỜNG: Vui lòng kiểm tra lại cấu hình các khóa VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID trong cài đặt Secrets xem có dư khoảng trắng, kí tự lạ hoặc sai ký tự nào không.`;
+
+    const runWithTimeout = async () => {
+      if (this.action === 'select') {
+        return this.executeSelect();
+      } else if (this.action === 'insert') {
+        return this.executeInsert();
+      } else if (this.action === 'update') {
+        return this.executeUpdate();
+      } else if (this.action === 'delete') {
+        return this.executeDelete();
+      }
+      return { data: null, error: null };
+    };
+
+    try {
+      return await withTimeout(runWithTimeout(), 8000, errorMsg);
+    } catch (err: any) {
+      console.error('Firestore operation timed out or failed:', err);
+      return { data: null, error: err.message || err };
     }
-    return { data: null, error: null };
   }
 
   then(onfulfilled?: (value: any) => any, onrejected?: (value: any) => any) {
