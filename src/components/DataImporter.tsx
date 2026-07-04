@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Upload, CheckCircle2, AlertTriangle, RefreshCw, FileCode, Server } from 'lucide-react';
+import { Upload, CheckCircle2, AlertTriangle, RefreshCw, FileCode, Server, Database } from 'lucide-react';
 
 interface DataImporterProps {
   user: { role: string };
@@ -13,6 +13,7 @@ export default function DataImporter({ user }: DataImporterProps) {
   const [jsonText, setJsonText] = useState('');
   const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
   const [importCount, setImportCount] = useState(0);
+  const [isInitializing, setIsInitializing] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,6 +84,88 @@ export default function DataImporter({ user }: DataImporterProps) {
     }
   };
 
+  const handleAutoInitialize = async () => {
+    setIsInitializing(true);
+    setStatus({ type: 'loading', message: 'Đang tự động khởi tạo 5 bộ sưu tập (Collections) với cấu trúc dữ liệu chuẩn trên Firebase...' });
+    
+    try {
+      const sampleCategory = {
+        id: "sample_category_id",
+        name: "Lĩnh vực Khoa học & Đời sống"
+      };
+
+      const sampleProfile = {
+        id: "admin_default",
+        username: "admin",
+        password: "adminpassword",
+        full_name: "Administrator",
+        role: "owner",
+        assigned_category_ids: ["sample_category_id"],
+        created_at: new Date().toISOString()
+      };
+
+      const sampleQuestion = {
+        id: "sample_question_id",
+        content: "Hành tinh nào trong hệ Mặt Trời được gọi là Hành tinh Đỏ?",
+        answer: "Sao Hỏa",
+        media_link: "",
+        difficulty: "Khởi động",
+        category_id: "sample_category_id",
+        created_by: "admin_default",
+        last_edited_by: "admin_default",
+        used_match_ids: [],
+        created_at: new Date().toISOString()
+      };
+
+      const sampleMatch = {
+        id: "sample_match_id",
+        name: "Trận đấu mẫu số 1",
+        is_published: false,
+        matrix: {
+          khoi_dong: {
+            private: [],
+            common: { question_ids: [], category_ids: [] }
+          },
+          ve_dich: {
+            question_ids: [],
+            category_ids: []
+          },
+          ve_dich_full: {
+            contestants: []
+          }
+        },
+        created_at: new Date().toISOString()
+      };
+
+      const sampleNotification = {
+        id: "sample_notification_id",
+        content: "Chào mừng bạn đến với hệ thống Quản lý Ngân hàng Câu hỏi bằng Firebase Firestore!",
+        link: "",
+        created_at: new Date().toISOString()
+      };
+
+      // Seeding in order
+      await supabase.from('categories').insert([sampleCategory]);
+      await supabase.from('profiles').insert([sampleProfile]);
+      await supabase.from('questions').insert([sampleQuestion]);
+      await supabase.from('matches').insert([sampleMatch]);
+      await supabase.from('notifications').insert([sampleNotification]);
+
+      setStatus({
+        type: 'success',
+        message: 'Khởi tạo thành công! Đã tạo đầy đủ 5 Collections (categories, profiles, questions, matches, notifications) và điền dữ liệu mẫu thành công lên Firebase!'
+      });
+    } catch (err: any) {
+      console.error('Initialization error:', err);
+      setStatus({
+        type: 'error',
+        message: 'Lỗi khởi tạo cấu trúc: ' + (err.message || err)
+      });
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   if (user.role !== 'owner' && user.role !== 'admin') {
     return (
       <div className="p-8 text-center text-[#64748B] bg-white rounded-3xl border border-pastel-purple-dark">
@@ -102,6 +185,33 @@ export default function DataImporter({ user }: DataImporterProps) {
             Công cụ hỗ trợ chuyển đổi dữ liệu nhanh chóng bằng cách tải lên tệp JSON xuất ra từ Supabase.
           </p>
         </div>
+      </div>
+
+      {/* One-click schema generator helper banner */}
+      <div className="p-5 bg-gradient-to-r from-pastel-purple/10 to-pastel-blue/10 rounded-2xl border border-pastel-purple-dark/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h3 className="font-bold text-accent-purple text-sm flex items-center gap-2">
+            <Database size={18} /> Khởi tạo cơ sở dữ liệu & Cấu trúc mẫu tự động
+          </h3>
+          <p className="text-xs text-[#64748B] max-w-2xl leading-relaxed">
+            Nếu bạn vừa tạo dự án Firebase trống, hãy nhấn nút bên phải. Hệ thống sẽ tự động gửi các dữ liệu mẫu khớp 100% với cấu trúc Supabase của bạn. Việc này giúp tự động tạo lập 5 Collections trong bảng điều khiển Firebase Console của bạn ngay lập tức!
+          </p>
+        </div>
+        <button
+          onClick={handleAutoInitialize}
+          disabled={isInitializing}
+          className="shrink-0 bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+        >
+          {isInitializing ? (
+            <>
+              <RefreshCw size={14} className="animate-spin" /> Đang tạo...
+            </>
+          ) : (
+            <>
+              <Database size={14} /> Khởi tạo Cấu trúc & Dữ liệu Mẫu
+            </>
+          )}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
