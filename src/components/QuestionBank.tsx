@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, type Question, type Category, type Profile } from '../lib/supabase';
+import { supabase, uploadFile, type Question, type Category, type Profile } from '../lib/supabase';
 import { 
   Plus, 
   Search, 
@@ -15,7 +15,12 @@ import {
   FileText,
   Clock,
   Download,
-  User
+  User,
+  Upload,
+  Layers,
+  Zap,
+  Image,
+  Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
@@ -35,6 +40,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null); // tracks uploading field
 
   // Form State
   const [formData, setFormData] = useState({
@@ -42,7 +48,18 @@ export default function QuestionBank({ user }: QuestionBankProps) {
     answer: '',
     media_link: '',
     difficulty: 'Khởi động' as Question['difficulty'],
-    category_id: ''
+    category_id: '',
+    // Vượt chướng ngại vật fields
+    sub_questions: [
+      { content: '', answer: '' },
+      { content: '', answer: '' },
+      { content: '', answer: '' },
+      { content: '', answer: '' }
+    ],
+    central_question: '',
+    central_answer: '',
+    keyword: '',
+    image_url: ''
   });
 
   useEffect(() => {
@@ -71,6 +88,21 @@ export default function QuestionBank({ user }: QuestionBankProps) {
     setLoading(false);
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetField: 'media_link' | 'image_url') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(targetField);
+    try {
+      const url = await uploadFile(file);
+      setFormData(prev => ({ ...prev, [targetField]: url }));
+      alert('Tải tệp lên thành công!');
+    } catch (err: any) {
+      alert('Lỗi tải tệp: ' + err.message);
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -87,7 +119,23 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
     setIsModalOpen(false);
     setEditingQuestion(null);
-    setFormData({ content: '', answer: '', media_link: '', difficulty: 'Khởi động', category_id: categories[0]?.id || '' });
+    setFormData({ 
+      content: '', 
+      answer: '', 
+      media_link: '', 
+      difficulty: 'Khởi động', 
+      category_id: categories[0]?.id || '',
+      sub_questions: [
+        { content: '', answer: '' },
+        { content: '', answer: '' },
+        { content: '', answer: '' },
+        { content: '', answer: '' }
+      ],
+      central_question: '',
+      central_answer: '',
+      keyword: '',
+      image_url: ''
+    });
     fetchData();
   };
 
@@ -140,7 +188,17 @@ export default function QuestionBank({ user }: QuestionBankProps) {
       answer: q.answer,
       media_link: q.media_link || '',
       difficulty: q.difficulty,
-      category_id: q.category_id
+      category_id: q.category_id,
+      sub_questions: q.sub_questions || [
+        { content: '', answer: '' },
+        { content: '', answer: '' },
+        { content: '', answer: '' },
+        { content: '', answer: '' }
+      ],
+      central_question: q.central_question || '',
+      central_answer: q.central_answer || '',
+      keyword: q.keyword || '',
+      image_url: q.image_url || ''
     });
     setIsModalOpen(true);
   };
@@ -222,6 +280,8 @@ export default function QuestionBank({ user }: QuestionBankProps) {
           <option value="10 điểm">10 điểm</option>
           <option value="20 điểm">20 điểm</option>
           <option value="30 điểm">30 điểm</option>
+          <option value="Vượt chướng ngại vật">Vượt chướng ngại vật</option>
+          <option value="Tăng tốc">Tăng tốc</option>
         </select>
         <div className="flex items-center justify-end px-2 text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60">
           {filteredQuestions.length} câu hỏi
@@ -246,44 +306,60 @@ export default function QuestionBank({ user }: QuestionBankProps) {
           <div className="p-12 text-center text-[#64748B] opacity-60 italic">Không tìm thấy câu hỏi nào.</div>
         ) : (
           <div className="divide-y divide-pastel-purple-dark/30">
-            {filteredQuestions.map((q, idx) => (
-              <div key={q.id} className="flex flex-col md:grid md:grid-cols-[40px_1.5fr_1fr_1fr_1fr_100px] p-4 hover:bg-pastel-blue/20 transition-colors items-start md:items-center group gap-4 md:gap-0">
-                {/* Mobile Header Row */}
-                <div className="flex items-center justify-between w-full md:hidden">
-                  <div className="text-[10px] font-mono text-[#64748B] opacity-40">#{idx + 1}</div>
-                  <div className="flex gap-2">
-                    <button onClick={() => openEdit(q)} className="p-2 bg-pastel-purple/30 text-accent-purple rounded-lg transition-all">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(q.id)} className="p-2 bg-red-50 text-red-500 rounded-lg transition-all">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
+            {filteredQuestions.map((q, idx) => {
+              const isVCNV = q.difficulty === 'Vượt chướng ngại vật';
+              const isTangToc = q.difficulty === 'Tăng tốc';
+              return (
+                <div key={q.id} className="flex flex-col p-4 hover:bg-pastel-blue/20 transition-colors items-start justify-stretch group gap-4 md:gap-2">
+                  <div className="w-full flex flex-col md:grid md:grid-cols-[40px_1.5fr_1fr_1fr_1fr_100px] items-start md:items-center gap-4 md:gap-0">
+                    {/* Mobile Header Row */}
+                    <div className="flex items-center justify-between w-full md:hidden">
+                      <div className="text-[10px] font-mono text-[#64748B] opacity-40">#{idx + 1}</div>
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(q)} className="p-2 bg-pastel-purple/30 text-accent-purple rounded-lg transition-all">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(q.id)} className="p-2 bg-red-50 text-red-500 rounded-lg transition-all">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="hidden md:block text-[10px] font-mono text-[#64748B] opacity-40">{idx + 1}</div>
-                
-                <div className="pr-4 w-full">
-                  <p className="text-sm font-medium line-clamp-3 md:line-clamp-2 mb-1 text-[#1E293B]">{q.content}</p>
-                  <p className="text-xs text-[#64748B] italic">Đáp án: {q.answer}</p>
-                </div>
+                    <div className="hidden md:block text-[10px] font-mono text-[#64748B] opacity-40">{idx + 1}</div>
+                    
+                    <div className="pr-4 w-full">
+                      {isVCNV ? (
+                        <div>
+                          <p className="text-sm font-bold text-accent-purple mb-1">Bộ Câu Hỏi Vượt Chướng Ngại Vật</p>
+                          <p className="text-xs text-[#1E293B]"><strong>Từ khóa hình ảnh:</strong> {q.keyword}</p>
+                          <p className="text-xs text-[#1E293B]"><strong>Câu hỏi trung tâm:</strong> {q.central_question} (Đáp án: {q.central_answer})</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm font-medium line-clamp-3 md:line-clamp-2 mb-1 text-[#1E293B]">{q.content}</p>
+                          <p className="text-xs text-[#64748B] italic">Đáp án: {q.answer}</p>
+                        </div>
+                      )}
+                    </div>
 
-                <div className="w-full md:w-auto">
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-2 py-0.5 bg-pastel-purple text-accent-purple rounded text-[10px] font-bold uppercase">
-                      {(q as any).categories?.name}
-                    </span>
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                      q.difficulty === 'Khởi động' ? "bg-blue-100 text-blue-700" :
-                      q.difficulty === '10 điểm' ? "bg-green-100 text-green-700" :
-                      q.difficulty === '20 điểm' ? "bg-yellow-100 text-yellow-700" :
-                      "bg-red-100 text-red-700"
-                    )}>
-                      {q.difficulty}
-                    </span>
-                  </div>
-                </div>
+                    <div className="w-full md:w-auto">
+                      <div className="flex flex-wrap gap-1">
+                        <span className="px-2 py-0.5 bg-pastel-purple text-accent-purple rounded text-[10px] font-bold uppercase">
+                          {(q as any).categories?.name}
+                        </span>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                          q.difficulty === 'Khởi động' ? "bg-blue-100 text-blue-700" :
+                          q.difficulty === '10 điểm' ? "bg-green-100 text-green-700" :
+                          q.difficulty === '20 điểm' ? "bg-yellow-100 text-yellow-700" :
+                          q.difficulty === '30 điểm' ? "bg-red-100 text-red-700" :
+                          q.difficulty === 'Vượt chướng ngại vật' ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        )}>
+                          {q.difficulty}
+                        </span>
+                      </div>
+                    </div>
 
                 <div className="text-[10px] text-[#64748B] opacity-60 flex flex-row md:flex-col gap-3 md:gap-1 w-full md:w-auto">
                   <div className="flex items-center gap-1">
@@ -328,8 +404,42 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {isVCNV && (
+                <div className="w-full pl-0 md:pl-10 mt-3 p-4 bg-pastel-purple/10 rounded-2xl border border-pastel-purple-dark/50 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-[#1E293B]">
+                  <div className="space-y-2">
+                    <p className="font-bold text-accent-purple tracking-wider uppercase text-[10px]">4 Mảnh ghép (Câu hỏi & Đáp án):</p>
+                    {q.sub_questions?.map((sq: any, sIdx: number) => (
+                      <div key={sIdx} className="p-2 bg-white rounded-lg border border-pastel-purple-dark/30">
+                        <p><strong>Mảnh ghép {sIdx + 1}:</strong> {sq.content || '(Trống)'}</p>
+                        <p className="text-accent-blue font-serif italic mt-0.5">Đáp án: {sq.answer || '(Trống)'}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-bold text-accent-purple tracking-wider uppercase text-[10px] mb-1">Hình ảnh đính kèm (Tỉ lệ 4:3):</p>
+                      {q.image_url ? (
+                        <img src={q.image_url} alt="Chướng ngại vật" className="w-40 aspect-[4/3] object-cover rounded-xl border border-pastel-purple-dark shadow-sm" referrerPolicy="no-referrer" />
+                      ) : (
+                        <p className="text-[#64748B] italic">Chưa tải hình ảnh lên</p>
+                      )}
+                    </div>
+                    {q.media_link && (
+                      <div>
+                        <p className="font-bold text-accent-purple tracking-wider uppercase text-[10px] mb-0.5">Link Media khác:</p>
+                        <a href={q.media_link} target="_blank" rel="noopener noreferrer" className="text-accent-blue hover:underline break-all inline-flex items-center gap-1">
+                          {q.media_link} <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
         )}
       </div>
 
@@ -371,43 +481,158 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                     <option value="10 điểm">10 điểm</option>
                     <option value="20 điểm">20 điểm</option>
                     <option value="30 điểm">30 điểm</option>
+                    <option value="Vượt chướng ngại vật">Vượt chướng ngại vật</option>
+                    <option value="Tăng tốc">Tăng tốc</option>
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Nội dung câu hỏi</label>
-                <textarea 
-                  value={formData.content}
-                  onChange={(e) => setFormData({...formData, content: e.target.value})}
-                  className="w-full px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm min-h-[80px] md:min-h-[100px] text-[#1E293B]"
-                  placeholder="Nhập nội dung câu hỏi..."
-                  required
-                />
-              </div>
+              {formData.difficulty === 'Vượt chướng ngại vật' ? (
+                <div className="space-y-6">
+                  <div className="p-4 bg-pastel-purple/10 rounded-2xl border border-pastel-purple-dark/50 space-y-4">
+                    <p className="font-bold text-accent-purple text-xs uppercase tracking-wider">Bộ 4 Câu hỏi Mảnh ghép</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {formData.sub_questions.map((sq, sIdx) => (
+                        <div key={sIdx} className="p-3 bg-white rounded-xl border border-pastel-purple-dark/30 space-y-2">
+                          <p className="font-bold text-accent-purple text-[10px]">Mảnh ghép {sIdx + 1}</p>
+                          <textarea
+                            value={sq.content}
+                            onChange={(e) => {
+                              const newSubs = [...formData.sub_questions];
+                              newSubs[sIdx].content = e.target.value;
+                              setFormData({ ...formData, sub_questions: newSubs });
+                            }}
+                            className="w-full px-3 py-2 bg-pastel-blue/20 rounded-lg border border-pastel-blue-dark outline-none text-xs text-[#1E293B]"
+                            placeholder={`Nội dung câu hỏi mảnh ghép ${sIdx + 1}`}
+                            rows={2}
+                          />
+                          <input
+                            type="text"
+                            value={sq.answer}
+                            onChange={(e) => {
+                              const newSubs = [...formData.sub_questions];
+                              newSubs[sIdx].answer = e.target.value;
+                              setFormData({ ...formData, sub_questions: newSubs });
+                            }}
+                            className="w-full px-3 py-2 bg-pastel-blue/20 rounded-lg border border-pastel-blue-dark outline-none text-xs text-[#1E293B]"
+                            placeholder={`Đáp án mảnh ghép ${sIdx + 1}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Đáp án</label>
-                <input 
-                  type="text"
-                  value={formData.answer}
-                  onChange={(e) => setFormData({...formData, answer: e.target.value})}
-                  className="w-full px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
-                  placeholder="Nhập đáp án..."
-                  required
-                />
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Câu hỏi trung tâm</label>
+                      <textarea 
+                        value={formData.central_question}
+                        onChange={(e) => setFormData({...formData, central_question: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                        placeholder="Nhập câu hỏi trung tâm..."
+                        rows={2}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Đáp án trung tâm</label>
+                      <input 
+                        type="text"
+                        value={formData.central_answer}
+                        onChange={(e) => setFormData({...formData, central_answer: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                        placeholder="Đáp án câu hỏi trung tâm"
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Link Media (Tùy chọn)</label>
-                <input 
-                  type="url"
-                  value={formData.media_link}
-                  onChange={(e) => setFormData({...formData, media_link: e.target.value})}
-                  className="w-full px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
-                  placeholder="https://..."
-                />
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Từ khóa (Nội dung hình ảnh)</label>
+                      <input 
+                        type="text"
+                        value={formData.keyword}
+                        onChange={(e) => setFormData({...formData, keyword: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                        placeholder="Từ khóa chính của chướng ngại vật"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60 flex items-center justify-between">
+                        <span>Hình ảnh chướng ngại vật (Tỉ lệ 4:3)</span>
+                        {uploading === 'image_url' && <span className="text-accent-blue animate-pulse text-[10px]">Đang tải lên...</span>}
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          value={formData.image_url}
+                          onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+                          className="flex-1 px-4 py-2.5 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                          placeholder="Link hình ảnh tỉ lệ 4:3"
+                        />
+                        <label className="bg-accent-blue hover:bg-accent-blue/90 text-white p-3 rounded-xl cursor-pointer transition-colors flex items-center justify-center shrink-0">
+                          <Upload size={18} />
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={(e) => handleFileUpload(e, 'image_url')} 
+                            accept="image/*"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Nội dung câu hỏi</label>
+                    <textarea 
+                      value={formData.content}
+                      onChange={(e) => setFormData({...formData, content: e.target.value})}
+                      className="w-full px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm min-h-[80px] md:min-h-[100px] text-[#1E293B]"
+                      placeholder="Nhập nội dung câu hỏi..."
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60">Đáp án</label>
+                    <input 
+                      type="text"
+                      value={formData.answer}
+                      onChange={(e) => setFormData({...formData, answer: e.target.value})}
+                      className="w-full px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                      placeholder="Nhập đáp án..."
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-accent-purple opacity-60 flex items-center justify-between">
+                      <span>Tải tệp phương tiện (Hình ảnh / Video / Audio)</span>
+                      {uploading === 'media_link' && <span className="text-accent-blue animate-pulse text-[10px]">Đang tải lên...</span>}
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={formData.media_link}
+                        onChange={(e) => setFormData({...formData, media_link: e.target.value})}
+                        className="flex-1 px-4 py-2.5 md:py-3 bg-pastel-blue/30 rounded-xl border border-pastel-blue-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+                        placeholder="Link hoặc tải tệp lên..."
+                      />
+                      <label className="bg-accent-blue hover:bg-accent-blue/90 text-white p-3 rounded-xl cursor-pointer transition-colors flex items-center justify-center shrink-0">
+                        <Upload size={18} />
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          onChange={(e) => handleFileUpload(e, 'media_link')} 
+                          accept="image/*,video/*,audio/*"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="pt-4 flex flex-col md:flex-row gap-3 md:gap-4 shrink-0">
                 <button 
