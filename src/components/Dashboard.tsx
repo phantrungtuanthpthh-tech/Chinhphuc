@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Download,
   Trash2,
-  Edit3
+  Edit3,
+  Server
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import QuestionBank from './QuestionBank';
@@ -26,13 +27,14 @@ import MatchManager from './MatchManager';
 import UserManager from './UserManager';
 import NotificationCenter from './NotificationCenter';
 import ChangePasswordModal from './ChangePasswordModal';
+import DataImporter from './DataImporter';
 
 interface DashboardProps {
   user: Profile;
   onLogout: () => void;
 }
 
-type View = 'questions' | 'categories' | 'matches' | 'users' | 'notifications';
+type View = 'questions' | 'categories' | 'matches' | 'users' | 'notifications' | 'importer';
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [activeView, setActiveView] = useState<View>('questions');
@@ -72,6 +74,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     { id: 'categories', label: 'Lĩnh vực', icon: Filter, roles: ['owner', 'admin'] },
     { id: 'users', label: 'Ban biên tập', icon: Users, roles: ['owner', 'admin'] },
     { id: 'notifications', label: 'Thông báo', icon: Bell, roles: ['owner', 'admin'] },
+    { id: 'importer', label: 'Nhập dữ liệu JSON', icon: Server, roles: ['owner', 'admin'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(user.role));
@@ -195,8 +198,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             {activeView === 'questions' && <QuestionBank user={user} />}
             {activeView === 'categories' && <CategoryManager user={user} />}
             {activeView === 'matches' && <MatchManager user={user} />}
-            {activeView === 'users' && <UserManager user={user} />}
+             {activeView === 'users' && <UserManager user={user} />}
             {activeView === 'notifications' && <NotificationCenter user={user} />}
+            {activeView === 'importer' && <DataImporter user={user} />}
           </div>
         </div>
       </main>
