@@ -18,10 +18,69 @@ import {
   Video,
   Music,
   Eye,
-  AlertCircle
+  AlertCircle,
+  Settings
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { renderMediaPreview } from './QuestionBank';
+
+export const renderVCNVMediaPreview = (url: string, showRedGrid = false) => {
+  if (!url) return null;
+  const lowercaseUrl = url.toLowerCase();
+  
+  const isImage = lowercaseUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)/i) || lowercaseUrl.includes('image/upload') || (lowercaseUrl.includes('res.cloudinary.com') && !lowercaseUrl.includes('/video/') && !lowercaseUrl.includes('/raw/'));
+  const isVideo = lowercaseUrl.match(/\.(mp4|webm|ogg|mov)/i) || lowercaseUrl.includes('video/upload');
+  const isAudio = lowercaseUrl.match(/\.(mp3|wav|ogg|m4a|flac)/i) || lowercaseUrl.includes('raw/upload') || lowercaseUrl.includes('.mp3') || lowercaseUrl.includes('.wav') || lowercaseUrl.includes('.m4a');
+
+  if (isImage) {
+    if (showRedGrid) {
+      return (
+        <div className="mt-3 relative w-full aspect-[16/10] rounded-2xl overflow-hidden border-2 border-red-500 bg-black shadow-md">
+          <img src={url} alt="Bản xem trước hình ảnh" className="w-full h-full object-cover opacity-90" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 pointer-events-none">
+            {/* Center rectangle */}
+            <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] border-2 border-red-500 bg-red-500/15 flex items-center justify-center shadow-[0_0_12px_rgba(239,68,68,0.5)] rounded-md">
+              <span className="text-white bg-red-600 px-2 py-0.5 rounded font-bold text-[9px] md:text-xs shadow border border-white/10 uppercase tracking-wider">Trung tâm</span>
+            </div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0.5 h-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 w-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 h-0.5 w-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+            <div className="absolute top-3 left-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow border border-white/20">1</div>
+            <div className="absolute top-3 right-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow border border-white/20">2</div>
+            <div className="absolute bottom-3 right-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow border border-white/20">3</div>
+            <div className="absolute bottom-3 left-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow border border-white/20">4</div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black/5 p-1">
+        <img src={url} alt="Bản xem trước hình ảnh" className="object-contain max-h-40 rounded-lg" referrerPolicy="no-referrer" />
+      </div>
+    );
+  } else if (isVideo) {
+    return (
+      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black">
+        <video src={url} controls className="w-full max-h-40 rounded-lg" />
+      </div>
+    );
+  } else if (isAudio) {
+    return (
+      <div className="mt-2 p-3 rounded-xl border border-pastel-blue-dark bg-white/50 flex flex-col gap-1">
+        <span className="text-[10px] text-accent-purple font-semibold">Xem trước âm thanh:</span>
+        <audio src={url} controls className="w-full" />
+      </div>
+    );
+  } else {
+    return (
+      <div className="mt-2 p-2 rounded-xl bg-pastel-blue/20 border border-dashed border-pastel-blue-dark text-center text-xs text-[#1E293B]">
+        <p className="font-semibold text-accent-blue mb-1">Tệp đính kèm:</p>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-accent-purple break-all">{url}</a>
+      </div>
+    );
+  }
+};
 
 interface VCNVManagerProps {
   user: Profile;
@@ -37,6 +96,11 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+
+  // Cloudinary Settings States
+  const [showCloudinaryConfig, setShowCloudinaryConfig] = useState(false);
+  const [cloudNameInput, setCloudNameInput] = useState(() => localStorage.getItem('cloudinary_cloud_name') || '');
+  const [uploadPresetInput, setUploadPresetInput] = useState(() => localStorage.getItem('cloudinary_upload_preset') || '');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -75,6 +139,22 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
       console.error('Lỗi khi tải dữ liệu câu hỏi VCNV:', err);
     }
     setLoading(false);
+  };
+
+  const handleSaveCloudinary = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cloudNameInput.trim()) {
+      localStorage.setItem('cloudinary_cloud_name', cloudNameInput.trim());
+    } else {
+      localStorage.removeItem('cloudinary_cloud_name');
+    }
+    if (uploadPresetInput.trim()) {
+      localStorage.setItem('cloudinary_upload_preset', uploadPresetInput.trim());
+    } else {
+      localStorage.removeItem('cloudinary_upload_preset');
+    }
+    alert('Đã lưu cấu hình Cloudinary thành công! Các lượt tải lên tiếp theo sẽ sử dụng cấu hình mới này.');
+    setShowCloudinaryConfig(false);
   };
 
   const resetForm = () => {
@@ -209,13 +289,77 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
             Thiết lập các bộ câu hỏi vượt chướng ngại vật độc lập (gồm 4 hàng ngang và từ khóa trung tâm). Phương tiện được lưu trữ trực tiếp trên Cloudinary.
           </p>
         </div>
-        <button 
-          onClick={openAdd}
-          className="bg-accent-purple text-white px-6 py-3 rounded-full font-bold uppercase text-[10px] md:text-xs tracking-widest hover:bg-accent-purple/90 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-accent-purple/20 shadow-accent-purple/10 self-start md:self-auto"
-        >
-          <Plus size={16} /> Thêm Bộ VCNV
-        </button>
+        <div className="flex gap-2 self-start md:self-auto">
+          <button 
+            onClick={() => setShowCloudinaryConfig(!showCloudinaryConfig)}
+            className="px-4 py-3 rounded-full border border-pastel-purple-dark text-accent-purple font-bold text-xs tracking-wider hover:bg-pastel-purple/10 transition-all flex items-center gap-2 bg-white shadow-sm"
+          >
+            <Settings size={16} /> Cấu hình Cloudinary
+          </button>
+          <button 
+            onClick={openAdd}
+            className="bg-accent-purple text-white px-6 py-3 rounded-full font-bold uppercase text-[10px] md:text-xs tracking-widest hover:bg-accent-purple/90 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-accent-purple/20 shadow-accent-purple/10"
+          >
+            <Plus size={16} /> Thêm Bộ VCNV
+          </button>
+        </div>
       </div>
+
+      {/* Cloudinary Settings Panel */}
+      {showCloudinaryConfig && (
+        <form 
+          onSubmit={handleSaveCloudinary}
+          className="bg-gradient-to-br from-pastel-purple/20 to-white p-5 md:p-6 rounded-3xl border border-pastel-purple-dark shadow-sm space-y-4 animate-in slide-in-from-top-4 duration-300"
+        >
+          <div className="flex items-center gap-2 border-b border-pastel-purple-dark/40 pb-2">
+            <Settings size={18} className="text-accent-purple" />
+            <h3 className="font-bold text-sm text-[#1E293B] uppercase tracking-wider">Cấu hình tải ảnh/video/âm thanh lên Cloudinary của bạn</h3>
+          </div>
+          <p className="text-xs text-[#64748B] leading-relaxed">
+            Nếu bạn gặp lỗi khi tải phương tiện lên, vui lòng kiểm tra và dán thông tin Cloud Name và tên <strong>Unsigned Upload Preset</strong> từ tài khoản Cloudinary của bạn bên dưới. Hệ thống sẽ ghi nhớ cấu hình này trực tiếp trên trình duyệt của bạn.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-[#64748B]">Cloud name (Tên đám mây)</label>
+              <input 
+                type="text"
+                value={cloudNameInput}
+                onChange={(e) => setCloudNameInput(e.target.value)}
+                placeholder="Ví dụ: hckpdc6f"
+                className="w-full px-4 py-2.5 bg-white rounded-xl border border-pastel-purple-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-[#64748B]">Unsigned Upload Preset (Tên bộ cài đặt không ký danh)</label>
+              <input 
+                type="text"
+                value={uploadPresetInput}
+                onChange={(e) => setUploadPresetInput(e.target.value)}
+                placeholder="Mặc định: ml_default (Hãy tạo một Unsigned Preset trong Settings -> Upload)"
+                className="w-full px-4 py-2.5 bg-white rounded-xl border border-pastel-purple-dark focus:ring-2 focus:ring-accent-blue outline-none text-sm text-[#1E293B]"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button 
+              type="button"
+              onClick={() => {
+                setCloudNameInput('');
+                setUploadPresetInput('');
+              }}
+              className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl"
+            >
+              Đặt lại mặc định
+            </button>
+            <button 
+              type="submit"
+              className="bg-accent-purple text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-accent-purple/90 transition-all shadow shadow-accent-purple/10"
+            >
+              Lưu cài đặt
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Filter / Search Bar */}
       <div className="bg-white p-4 md:p-6 rounded-3xl border border-pastel-purple-dark shadow-sm flex flex-col md:flex-row gap-4">
@@ -342,53 +486,88 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
                       )}
                     </div>
 
-                    {/* Image Suggestion */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-[#64748B] block mb-1">Hình ảnh đính kèm (Cloudinary)</span>
-                        {q.image_url ? (
-                          <div className="relative aspect-[4/3] rounded-xl overflow-hidden border border-pastel-purple-dark">
-                            <img src={q.image_url} alt="Gợi ý VCNV" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                        ) : (
-                          <div className="aspect-[4/3] rounded-xl border border-dashed border-[#CBD5E1] bg-slate-50 flex flex-col items-center justify-center text-[10px] text-[#64748B] p-2 text-center">
-                            <ImageIcon size={20} className="opacity-40 mb-1" />
-                            <span>Không có hình ảnh</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <span className="text-[9px] uppercase tracking-widest font-bold text-[#64748B] block mb-1">Phương tiện bổ sung (Cloudinary)</span>
-                        {q.media_link ? (
-                          <div className="h-[75px] flex flex-col justify-between p-2 rounded-xl border border-pastel-purple-dark bg-slate-50 text-[10px]">
-                            <div className="truncate font-semibold text-accent-blue flex items-center gap-1">
-                              {q.media_link.toLowerCase().match(/\.(mp3|wav|m4a)/) ? <Music size={12} /> : <Video size={12} />}
-                              <span>Tệp phương tiện</span>
+                    {/* Image Suggestion with 5-part red line grid (Larger image) */}
+                    <div className="space-y-3">
+                      <span className="text-[9px] uppercase tracking-widest font-bold text-[#64748B] block mb-1">
+                        Hình ảnh gợi ý VCNV (Phân chia 5 phần)
+                      </span>
+                      {q.image_url ? (
+                        <div className="relative w-full aspect-[4/3] md:aspect-[16/10] rounded-2xl overflow-hidden border-2 border-red-500/30 bg-black shadow-md group/preview">
+                          <img 
+                            src={q.image_url} 
+                            alt="Gợi ý VCNV" 
+                            className="w-full h-full object-cover opacity-90 transition-transform duration-500 group-hover/preview:scale-105" 
+                            referrerPolicy="no-referrer"
+                          />
+                          
+                          {/* Red grid lines overlay */}
+                          <div className="absolute inset-0 pointer-events-none">
+                            {/* Center rectangle */}
+                            <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] border-2 border-red-500 bg-red-500/10 flex items-center justify-center shadow-[0_0_12px_rgba(239,68,68,0.4)] rounded-md">
+                              <span className="text-white bg-red-600 px-2 py-0.5 rounded font-bold text-[9px] md:text-xs shadow border border-white/10 uppercase tracking-wider">
+                                Trung tâm
+                              </span>
                             </div>
-                            <a 
-                              href={q.media_link} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="text-accent-purple hover:underline truncate block"
-                            >
-                              {q.media_link}
-                            </a>
-                            <button 
-                              onClick={() => window.open(q.media_link)} 
-                              className="w-full text-[9px] font-bold uppercase bg-white border border-pastel-purple-dark rounded py-1 hover:bg-slate-100 transition-colors"
-                            >
-                              Mở tệp tin
-                            </button>
+
+                            {/* Top vertical line */}
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+
+                            {/* Bottom vertical line */}
+                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0.5 h-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+
+                            {/* Left horizontal line */}
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 w-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+
+                            {/* Right horizontal line */}
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 h-0.5 w-[30%] bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+
+                            {/* Labels for the corners */}
+                            <div className="absolute top-3 left-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-md border border-white/20 animate-pulse">
+                              1
+                            </div>
+                            <div className="absolute top-3 right-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-md border border-white/20 animate-pulse">
+                              2
+                            </div>
+                            <div className="absolute bottom-3 right-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-md border border-white/20 animate-pulse">
+                              3
+                            </div>
+                            <div className="absolute bottom-3 left-3 bg-red-600 text-white font-bold w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-md border border-white/20 animate-pulse">
+                              4
+                            </div>
                           </div>
-                        ) : (
-                          <div className="aspect-[4/3] rounded-xl border border-dashed border-[#CBD5E1] bg-slate-50 flex flex-col items-center justify-center text-[10px] text-[#64748B] p-2 text-center">
-                            <Music size={20} className="opacity-40 mb-1" />
-                            <span>Không có âm thanh/video</span>
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="w-full aspect-[16/10] rounded-xl border border-dashed border-[#CBD5E1] bg-slate-50 flex flex-col items-center justify-center text-[10px] text-[#64748B] p-4 text-center">
+                          <ImageIcon size={28} className="opacity-40 mb-1" />
+                          <span>Không có hình ảnh đính kèm</span>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Extra media (Music / Video) - displayed only as an icon and small info */}
+                    {q.media_link && (
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-accent-purple/10 text-accent-purple flex items-center justify-center shrink-0">
+                            {q.media_link.toLowerCase().match(/\.(mp3|wav|m4a|ogg|flac)/) || q.media_link.includes('audio/') ? (
+                              <Music size={18} />
+                            ) : (
+                              <Video size={18} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#1E293B] truncate">Phương tiện bổ trợ</p>
+                            <p className="text-[10px] text-[#64748B] truncate">{q.media_link}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => window.open(q.media_link)}
+                          className="px-3 py-1.5 bg-white border border-[#CBD5E1] hover:bg-slate-50 rounded-lg text-[10px] font-bold uppercase transition-all shrink-0 flex items-center gap-1 text-[#475569]"
+                        >
+                          <ExternalLink size={10} /> Mở tệp
+                        </button>
+                      </div>
+                    )}
 
                     {/* Metadata */}
                     <div className="text-[10px] text-[#94A3B8] font-semibold space-y-0.5">
@@ -518,7 +697,7 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
                         />
                       </label>
                     </div>
-                    {formData.image_url && renderMediaPreview(formData.image_url)}
+                    {formData.image_url && renderVCNVMediaPreview(formData.image_url, true)}
                   </div>
 
                   {/* Audio/Video/Other field */}
@@ -545,7 +724,7 @@ export default function VCNVManager({ user }: VCNVManagerProps) {
                         />
                       </label>
                     </div>
-                    {formData.media_link && renderMediaPreview(formData.media_link)}
+                    {formData.media_link && renderVCNVMediaPreview(formData.media_link)}
                   </div>
                 </div>
               </div>

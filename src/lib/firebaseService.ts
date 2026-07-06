@@ -190,11 +190,21 @@ export const seedDefaultOwner = async () => {
   }
 };
 
+// Helper to get Cloudinary settings with LocalStorage override support
+export const getCloudinaryConfig = () => {
+  const localCloudName = localStorage.getItem('cloudinary_cloud_name');
+  const localPreset = localStorage.getItem('cloudinary_upload_preset');
+  
+  return {
+    cloudName: localCloudName || getEnv('VITE_CLOUDINARY_CLOUD_NAME') || 'hckpdc6f',
+    uploadPreset: localPreset || getEnv('VITE_CLOUDINARY_UPLOAD_PRESET') || 'ml_default'
+  };
+};
+
 // File Upload helper to Cloudinary (using unsigned upload)
 export const uploadFile = async (file: File, folder: string = 'media'): Promise<string> => {
   try {
-    const cloudName = getEnv('VITE_CLOUDINARY_CLOUD_NAME') || 'hckpdc6f';
-    const uploadPreset = getEnv('VITE_CLOUDINARY_UPLOAD_PRESET') || 'ml_default';
+    const { cloudName, uploadPreset } = getCloudinaryConfig();
 
     const formData = new FormData();
     formData.append('file', file);
