@@ -797,9 +797,9 @@ export default function MatchManager({ user }: MatchManagerProps) {
                           <span className="text-[10px] font-bold uppercase tracking-widest text-accent-purple opacity-60">
                             {categories.find(c => c.id === q.category_id)?.name} • {q.difficulty}
                           </span>
-                          {q.used_match_ids.length > 0 && (
+                          {(q.used_match_ids || []).length > 0 && (
                             <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-bold uppercase">
-                              Đã dùng {q.used_match_ids.length} lần
+                              Đã dùng {(q.used_match_ids || []).length} lần
                             </span>
                           )}
                         </div>
