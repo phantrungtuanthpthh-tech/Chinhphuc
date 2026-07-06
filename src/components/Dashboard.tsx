@@ -18,7 +18,8 @@ import {
   Download,
   Trash2,
   Edit3,
-  Server
+  Server,
+  Layers
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import QuestionBank from './QuestionBank';
@@ -28,13 +29,14 @@ import UserManager from './UserManager';
 import NotificationCenter from './NotificationCenter';
 import ChangePasswordModal from './ChangePasswordModal';
 import DataImporter from './DataImporter';
+import VCNVManager from './VCNVManager';
 
 interface DashboardProps {
   user: Profile;
   onLogout: () => void;
 }
 
-type View = 'questions' | 'categories' | 'matches' | 'users' | 'notifications' | 'importer';
+type View = 'questions' | 'vcnv' | 'categories' | 'matches' | 'users' | 'notifications' | 'importer';
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [activeView, setActiveView] = useState<View>('questions');
@@ -70,6 +72,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
   const menuItems = [
     { id: 'questions', label: 'Ngân hàng câu hỏi', icon: Database, roles: ['owner', 'admin', 'editor'] },
+    { id: 'vcnv', label: 'Vượt chướng ngại vật', icon: Layers, roles: ['owner', 'admin', 'editor'] },
     { id: 'matches', label: 'Quản lý trận đấu', icon: Trophy, roles: ['owner', 'admin'] },
     { id: 'categories', label: 'Lĩnh vực', icon: Filter, roles: ['owner', 'admin'] },
     { id: 'users', label: 'Ban biên tập', icon: Users, roles: ['owner', 'admin'] },
@@ -196,6 +199,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto">
             {activeView === 'questions' && <QuestionBank user={user} />}
+            {activeView === 'vcnv' && <VCNVManager user={user} />}
             {activeView === 'categories' && <CategoryManager user={user} />}
             {activeView === 'matches' && <MatchManager user={user} />}
              {activeView === 'users' && <UserManager user={user} />}

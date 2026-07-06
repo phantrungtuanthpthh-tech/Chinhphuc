@@ -25,6 +25,43 @@ import {
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 
+export const renderMediaPreview = (url: string) => {
+  if (!url) return null;
+  const lowercaseUrl = url.toLowerCase();
+  
+  const isImage = lowercaseUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)/i) || lowercaseUrl.includes('image/upload') || (lowercaseUrl.includes('res.cloudinary.com') && !lowercaseUrl.includes('/video/') && !lowercaseUrl.includes('/raw/'));
+  const isVideo = lowercaseUrl.match(/\.(mp4|webm|ogg|mov)/i) || lowercaseUrl.includes('video/upload');
+  const isAudio = lowercaseUrl.match(/\.(mp3|wav|ogg|m4a|flac)/i) || lowercaseUrl.includes('raw/upload');
+
+  if (isImage) {
+    return (
+      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black/5 p-1">
+        <img src={url} alt="Bản xem trước hình ảnh" className="object-contain max-h-40 rounded-lg" referrerPolicy="no-referrer" />
+      </div>
+    );
+  } else if (isVideo) {
+    return (
+      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black">
+        <video src={url} controls className="w-full max-h-40 rounded-lg" />
+      </div>
+    );
+  } else if (isAudio || lowercaseUrl.includes('.mp3') || lowercaseUrl.includes('.wav') || lowercaseUrl.includes('.m4a')) {
+    return (
+      <div className="mt-2 p-3 rounded-xl border border-pastel-blue-dark bg-white/50 flex flex-col gap-1">
+        <span className="text-[10px] text-accent-purple font-semibold">Xem trước âm thanh:</span>
+        <audio src={url} controls className="w-full" />
+      </div>
+    );
+  } else {
+    return (
+      <div className="mt-2 p-2 rounded-xl bg-pastel-blue/20 border border-dashed border-pastel-blue-dark text-center text-xs text-[#1E293B]">
+        <p className="font-semibold text-accent-blue mb-1">Tệp đính kèm:</p>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-accent-purple break-all">{url}</a>
+      </div>
+    );
+  }
+};
+
 interface QuestionBankProps {
   user: Profile;
 }
@@ -636,6 +673,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                         />
                       </label>
                     </div>
+                    {renderMediaPreview(formData.media_link)}
                   </div>
                 </>
               )}

@@ -88,6 +88,25 @@ export interface Notification {
   created_at: string;
 }
 
+export interface VCNVQuestion {
+  id: string;
+  name: string;
+  category_id: string;
+  keyword: string;
+  image_url?: string;
+  media_link?: string;
+  sub_questions: { content: string; answer: string }[];
+  central_question?: string;
+  central_answer?: string;
+  created_by: string;
+  last_edited_by: string;
+  created_at: string;
+  // Joined fields
+  categories?: { name: string } | null;
+  creator?: { full_name: string } | null;
+  editor?: { full_name: string } | null;
+}
+
 // Get Vite environment variables safely bypassing TypeScript definitions
 const getEnv = (key: string): string => {
   return (import.meta as any).env?.[key] || '';
@@ -171,20 +190,33 @@ export const seedDefaultOwner = async () => {
   }
 };
 
-// File Upload helper to Firebase Storage
+// File Upload helper to Cloudinary (using unsigned upload)
 export const uploadFile = async (file: File, folder: string = 'media'): Promise<string> => {
   try {
-    const firebaseApp = getFirebaseApp();
-    const storage = getStorage(firebaseApp);
-    const uniqueName = `${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, `${folder}/${uniqueName}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
+    const cloudName = getEnv('VITE_CLOUDINARY_CLOUD_NAME') || 'hckpdc6f';
+    const uploadPreset = getEnv('VITE_CLOUDINARY_UPLOAD_PRESET') || 'ml_default';
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', uploadPreset);
+    formData.append('folder', folder);
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || 'Lỗi từ phía Cloudinary API khi tải lên.');
+    }
+
+    const data = await response.json();
+    return data.secure_url;
   } catch (err: any) {
-    console.error('Firebase Storage upload error:', err);
+    console.error('Cloudinary upload error:', err);
     throw new Error(
-      `Không thể tải tệp lên Cloud Storage (Gói miễn phí Firebase đôi khi chưa kích hoạt Storage hoặc bị giới hạn quyền).\n\n` +
-      `Giải pháp: Bạn hoàn toàn có thể tự tải ảnh/video lên các trang lưu trữ miễn phí bên ngoài (như Imgur, Google Drive ở chế độ công khai, v.v.) rồi DÁN trực tiếp đường link đó vào ô nhập liệu bên cạnh nút tải lên.`
+      `Không thể tải tệp lên Cloudinary (Vui lòng kiểm tra lại cấu hình Cloud Name & Preset).\nChi tiết lỗi: ${err.message || err}`
     );
   }
 };
@@ -546,6 +578,91 @@ export const firebaseService = {
         deleteDoc(doc(firestore, 'matches', id)),
         8000,
         timeoutErrorMsg('Xóa trận đấu')
+      );
+    }
+  },
+
+  vcnv: {
+    getAll: async (): Promise<VCNVQuestion[]> => {
+      await seedDefaultOwner();
+      const firestore = getFirestoreInstance();
+      const qSnap = await withTimeout(
+        getDocs(query(collection(firestore, 'vcnv_questions'), orderBy('created_at', 'desc'))),
+        8000,
+        'Không thể kết nối đến Firestore để lấy danh sách câu hỏi VCNV.'
+      );
+      const list = qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VCNVQuestion));
+      try {
+        const catsSnap = await getDocs(collection(firestore, 'categories'));
+        const catsMap = new Map(catsSnap.docs.map(d => [d.id, d.data()]));
+
+        const profsSnap = await getDocs(collection(firestore, 'profiles'));
+        const profsMap = new Map(profsSnap.docs.map(d => [d.id, d.data()]));
+
+        return list.map(q => {
+          const category = catsMap.get(q.category_id);
+          const creator = profsMap.get(q.created_by);
+          const editor = profsMap.get(q.last_edited_by);
+
+          return {
+            ...q,
+            categories: category ? { name: (category as any).name } : null,
+            creator: creator ? { full_name: (creator as any).full_name } : null,
+            editor: editor ? { full_name: (editor as any).full_name } : null
+          };
+        });
+      } catch (err) {
+        console.warn('Lỗi khi liên kết câu hỏi VCNV:', err);
+        return list;
+      }
+    },
+    create: async (vcnvQuestion: Omit<VCNVQuestion, 'id'> & { id?: string }): Promise<VCNVQuestion> => {
+      const firestore = getFirestoreInstance();
+      const data = { ...vcnvQuestion };
+      if (!data.created_at) {
+        data.created_at = new Date().toISOString();
+      }
+      delete (data as any).categories;
+      delete (data as any).creator;
+      delete (data as any).editor;
+
+      const docId = data.id;
+      if (docId) {
+        delete data.id;
+        await withTimeout(
+          setDoc(doc(firestore, 'vcnv_questions', docId), data),
+          8000,
+          'Không thể lưu câu hỏi VCNV.'
+        );
+        return { id: docId, ...data } as VCNVQuestion;
+      } else {
+        const docRef = await withTimeout(
+          addDoc(collection(firestore, 'vcnv_questions'), data),
+          8000,
+          'Không thể thêm câu hỏi VCNV.'
+        );
+        return { id: docRef.id, ...data } as VCNVQuestion;
+      }
+    },
+    update: async (id: string, fields: Partial<VCNVQuestion>): Promise<void> => {
+      const firestore = getFirestoreInstance();
+      const cleanFields = { ...fields };
+      delete (cleanFields as any).categories;
+      delete (cleanFields as any).creator;
+      delete (cleanFields as any).editor;
+
+      await withTimeout(
+        updateDoc(doc(firestore, 'vcnv_questions', id), cleanFields),
+        8000,
+        'Không thể cập nhật câu hỏi VCNV.'
+      );
+    },
+    delete: async (id: string): Promise<void> => {
+      const firestore = getFirestoreInstance();
+      await withTimeout(
+        deleteDoc(doc(firestore, 'vcnv_questions', id)),
+        8000,
+        'Không thể xóa câu hỏi VCNV.'
       );
     }
   },
