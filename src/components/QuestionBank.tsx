@@ -35,14 +35,14 @@ export const renderMediaPreview = (url: string) => {
 
   if (isImage) {
     return (
-      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black/5 p-1">
-        <img src={url} alt="Bản xem trước hình ảnh" className="object-contain max-h-40 rounded-lg" referrerPolicy="no-referrer" />
+      <div className="mt-2 relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-pastel-blue-dark bg-black flex items-center justify-center">
+        <img src={url} alt="Bản xem trước hình ảnh" className="w-full h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
       </div>
     );
   } else if (isVideo) {
     return (
-      <div className="mt-2 relative rounded-xl overflow-hidden border border-pastel-blue-dark max-h-48 flex justify-center bg-black">
-        <video src={url} controls className="w-full max-h-40 rounded-lg" />
+      <div className="mt-2 relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-pastel-blue-dark bg-black flex items-center justify-center">
+        <video src={url} controls className="w-full h-full object-contain rounded-lg" />
       </div>
     );
   } else if (isAudio || lowercaseUrl.includes('.mp3') || lowercaseUrl.includes('.wav') || lowercaseUrl.includes('.m4a')) {
@@ -196,7 +196,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
   const exportToExcel = () => {
     const data = filteredQuestions.map((q, idx) => {
-      const usedMatchNames = q.used_match_ids
+      const usedMatchNames = (q.used_match_ids || [])
         .map(mid => {
           const match = matches.find(m => m.id === mid);
           return (match && match.is_published) ? match.name : null;
@@ -323,7 +323,6 @@ export default function QuestionBank({ user }: QuestionBankProps) {
           <option value="10 điểm">10 điểm</option>
           <option value="20 điểm">20 điểm</option>
           <option value="30 điểm">30 điểm</option>
-          <option value="Vượt chướng ngại vật">Vượt chướng ngại vật</option>
           <option value="Tăng tốc">Tăng tốc</option>
         </select>
         <div className="flex items-center justify-end px-2 text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60">
@@ -416,10 +415,10 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                 </div>
 
                 <div className="text-[10px] text-[#64748B] opacity-60 w-full md:w-auto">
-                  {q.used_match_ids.length > 0 ? (
+                  {(q.used_match_ids || []).length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       <span className="md:hidden mr-1">Đã dùng:</span>
-                      {q.used_match_ids.map(mid => {
+                      {(q.used_match_ids || []).map(mid => {
                         const match = matches.find(m => m.id === mid);
                         if (!match || !match.is_published) return null;
                         return (
@@ -428,7 +427,7 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                           </span>
                         );
                       }).filter(Boolean)}
-                      {q.used_match_ids.every(mid => {
+                      {(q.used_match_ids || []).every(mid => {
                         const match = matches.find(m => m.id === mid);
                         return !match || !match.is_published;
                       }) && <span className="italic">Chưa sử dụng</span>}
@@ -524,7 +523,6 @@ export default function QuestionBank({ user }: QuestionBankProps) {
                     <option value="10 điểm">10 điểm</option>
                     <option value="20 điểm">20 điểm</option>
                     <option value="30 điểm">30 điểm</option>
-                    <option value="Vượt chướng ngại vật">Vượt chướng ngại vật</option>
                     <option value="Tăng tốc">Tăng tốc</option>
                   </select>
                 </div>

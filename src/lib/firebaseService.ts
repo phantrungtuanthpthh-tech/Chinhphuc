@@ -416,7 +416,14 @@ export const firebaseService = {
         8000,
         timeoutErrorMsg('Lấy danh sách câu hỏi')
       );
-      const questionsList = qSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+      const questionsList = qSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          used_match_ids: data.used_match_ids || []
+        } as Question;
+      });
       
       try {
         const catsSnap = await getDocs(collection(firestore, 'categories'));
