@@ -30,6 +30,9 @@ const firebaseConfig = {
   storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
   messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
   appId: getEnv('VITE_FIREBASE_APP_ID')
+  console.log("===== FIREBASE CONFIG =====");
+console.log(firebaseConfig);
+console.log("===========================");
 };
 
 let app: FirebaseApp | null = null;

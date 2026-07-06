@@ -145,11 +145,20 @@ export default function DataImporter({ user }: DataImporterProps) {
       };
 
       // Seeding in order
-      await supabase.from('categories').insert([sampleCategory]);
-      await supabase.from('profiles').insert([sampleProfile]);
-      await supabase.from('questions').insert([sampleQuestion]);
-      await supabase.from('matches').insert([sampleMatch]);
-      await supabase.from('notifications').insert([sampleNotification]);
+      const r1 = await supabase.from('categories').insert([sampleCategory]);
+      if (r1.error) throw new Error(`Lỗi khởi tạo 'categories': ${r1.error.message || r1.error}`);
+
+      const r2 = await supabase.from('profiles').insert([sampleProfile]);
+      if (r2.error) throw new Error(`Lỗi khởi tạo 'profiles': ${r2.error.message || r2.error}`);
+
+      const r3 = await supabase.from('questions').insert([sampleQuestion]);
+      if (r3.error) throw new Error(`Lỗi khởi tạo 'questions': ${r3.error.message || r3.error}`);
+
+      const r4 = await supabase.from('matches').insert([sampleMatch]);
+      if (r4.error) throw new Error(`Lỗi khởi tạo 'matches': ${r4.error.message || r4.error}`);
+
+      const r5 = await supabase.from('notifications').insert([sampleNotification]);
+      if (r5.error) throw new Error(`Lỗi khởi tạo 'notifications': ${r5.error.message || r5.error}`);
 
       setStatus({
         type: 'success',
