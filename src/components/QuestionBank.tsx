@@ -8,6 +8,8 @@ import {
   Trash2, 
   ExternalLink, 
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   Check,
   MoreVertical,
@@ -78,6 +80,8 @@ export default function QuestionBank({ user }: QuestionBankProps) {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null); // tracks uploading field
+  const [currentPage, setCurrentPage] = useState(1);
+  const questionsPerPage = 50;
 
   // Form State
   const [formData, setFormData] = useState({
@@ -102,6 +106,10 @@ export default function QuestionBank({ user }: QuestionBankProps) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory, selectedDifficulty]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -258,6 +266,11 @@ export default function QuestionBank({ user }: QuestionBankProps) {
     return matchesSearch && matchesCategory && matchesDifficulty && isAssigned;
   });
 
+  const indexOfLastQuestion = currentPage * questionsPerPage;
+  const indexOfFirstQuestion = indexOfLastQuestion - questionsPerPage;
+  const currentQuestions = filteredQuestions.slice(indexOfFirstQuestion, indexOfLastQuestion);
+  const totalPages = Math.ceil(filteredQuestions.length / questionsPerPage);
+
   const availableCategories = user.role === 'editor' 
     ? categories.filter(c => user.assigned_category_ids.includes(c.id))
     : categories;
@@ -348,7 +361,8 @@ export default function QuestionBank({ user }: QuestionBankProps) {
           <div className="p-12 text-center text-[#64748B] opacity-60 italic">Không tìm thấy câu hỏi nào.</div>
         ) : (
           <div className="divide-y divide-pastel-purple-dark/30">
-            {filteredQuestions.map((q, idx) => {
+            {currentQuestions.map((q, localIdx) => {
+              const idx = indexOfFirstQuestion + localIdx;
               const isVCNV = q.difficulty === 'Vượt chướng ngại vật';
               const isTangToc = q.difficulty === 'Tăng tốc';
               return (
@@ -484,6 +498,108 @@ export default function QuestionBank({ user }: QuestionBankProps) {
       </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-pastel-purple-dark/30 bg-white px-4 py-4 sm:px-6 rounded-2xl shadow-sm">
+          <div className="flex flex-1 justify-between sm:hidden">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center rounded-xl border border-pastel-purple-dark bg-white px-4 py-2 text-xs font-bold uppercase text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+            >
+              Trước
+            </button>
+            <span className="text-xs text-[#64748B] self-center">
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="relative ml-3 inline-flex items-center rounded-xl border border-pastel-purple-dark bg-white px-4 py-2 text-xs font-bold uppercase text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+            >
+              Sau
+            </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs text-[#64748B]">
+                Hiển thị <span className="font-semibold text-accent-purple">{indexOfFirstQuestion + 1}</span> đến{' '}
+                <span className="font-semibold text-accent-purple">
+                  {Math.min(indexOfLastQuestion, filteredQuestions.length)}
+                </span>{' '}
+                trong tổng số <span className="font-semibold text-accent-purple">{filteredQuestions.length}</span> câu hỏi
+              </p>
+            </div>
+            <div>
+              <nav className="isolate inline-flex -space-x-px rounded-xl shadow-sm gap-1" aria-label="Pagination">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-lg border border-pastel-purple-dark bg-white p-2 text-xs font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="sr-only">Đầu</span>
+                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4 -ml-2" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-lg border border-pastel-purple-dark bg-white p-2 text-xs font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="sr-only">Trước</span>
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = currentPage;
+                  if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  if (pageNum < 1 || pageNum > totalPages) return null;
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={cn(
+                        "relative inline-flex items-center rounded-lg px-3 py-2 text-xs font-bold transition-all border",
+                        currentPage === pageNum
+                          ? "z-10 bg-accent-purple text-white border-accent-purple shadow-md"
+                          : "bg-white text-[#64748B] border-pastel-purple-dark hover:bg-slate-50"
+                      )}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center rounded-lg border border-pastel-purple-dark bg-white p-2 text-xs font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="sr-only">Sau</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center rounded-lg border border-pastel-purple-dark bg-white p-2 text-xs font-semibold text-[#64748B] hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <span className="sr-only">Cuối</span>
+                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 -mr-2" />
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (

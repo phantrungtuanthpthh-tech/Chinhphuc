@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { firebaseService, type Match, type Category, type Question, type Profile, type MatchMatrix } from '../lib/firebaseService';
+import { firebaseService, type Match, type Category, type Question, type Profile, type MatchMatrix, type VCNVQuestion } from '../lib/firebaseService';
 import { 
   Plus, 
   Trophy, 
@@ -36,7 +36,29 @@ const INITIAL_MATRIX: MatchMatrix = {
   },
   ve_dich_full: {
     contestants: Array.from({ length: 4 }, (_, i) => ({ contestant_id: i + 1, question_ids: Array(9).fill(''), category_ids: Array(9).fill('') }))
+  },
+  vcnv: {
+    package_id: ''
+  },
+  tang_toc: {
+    question_ids: Array(4).fill(''),
+    category_ids: Array(4).fill('')
   }
+};
+
+const sanitizeMatrix = (m: MatchMatrix): MatchMatrix => {
+  return {
+    ...INITIAL_MATRIX,
+    ...m,
+    khoi_dong: m?.khoi_dong || INITIAL_MATRIX.khoi_dong,
+    ve_dich: m?.ve_dich || INITIAL_MATRIX.ve_dich,
+    ve_dich_full: m?.ve_dich_full || INITIAL_MATRIX.ve_dich_full,
+    vcnv: m?.vcnv || { package_id: '' },
+    tang_toc: m?.tang_toc || {
+      question_ids: Array(4).fill(''),
+      category_ids: Array(4).fill('')
+    }
+  };
 };
 
 export default function MatchManager({ user }: MatchManagerProps) {
@@ -49,6 +71,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
   const [matchName, setMatchName] = useState('');
   const [matrix, setMatrix] = useState<MatchMatrix>(INITIAL_MATRIX);
   const [questionsMap, setQuestionsMap] = useState<Record<string, Question>>({});
+  const [vcnvPackages, setVcnvPackages] = useState<VCNVQuestion[]>([]);
   
   const getKhoiDongQuestionIds = (m: MatchMatrix) => {
     const ids: string[] = [];
@@ -83,12 +106,14 @@ export default function MatchManager({ user }: MatchManagerProps) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [matchesData, categoriesData] = await Promise.all([
+      const [matchesData, categoriesData, vcnvData] = await Promise.all([
         firebaseService.matches.getAll(),
-        firebaseService.categories.getAll()
+        firebaseService.categories.getAll(),
+        firebaseService.vcnv.getAll()
       ]);
       setMatches(matchesData);
       setCategories(categoriesData);
+      setVcnvPackages(vcnvData);
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu trận đấu:', err);
     }
@@ -119,16 +144,18 @@ export default function MatchManager({ user }: MatchManagerProps) {
       return alert('Lỗi: Có câu hỏi trùng lặp trong phần Khởi động. Vui lòng kiểm tra lại các câu hỏi hiển thị chữ màu đỏ.');
     }
 
+    const sanitized = sanitizeMatrix(matrix);
+
     try {
       if (editingMatch) {
         await firebaseService.matches.update(editingMatch.id, {
           name: matchName,
-          matrix: matrix
+          matrix: sanitized
         });
       } else {
         await firebaseService.matches.create({
           name: matchName,
-          matrix: matrix,
+          matrix: sanitized,
           is_published: false,
           created_at: new Date().toISOString()
         } as any);
@@ -147,8 +174,9 @@ export default function MatchManager({ user }: MatchManagerProps) {
   const handleEditMatch = (match: Match) => {
     setEditingMatch(match);
     setMatchName(match.name);
-    setMatrix(match.matrix);
-    fetchQuestionsForMatrix(match.matrix);
+    const sanitized = sanitizeMatrix(match.matrix);
+    setMatrix(sanitized);
+    fetchQuestionsForMatrix(sanitized);
     setIsCreating(false);
   };
 
@@ -205,12 +233,18 @@ export default function MatchManager({ user }: MatchManagerProps) {
     ids.push(...m.khoi_dong.common.question_ids);
     ids.push(...m.ve_dich.question_ids);
     m.ve_dich_full.contestants.forEach(c => ids.push(...c.question_ids));
+    if (m.tang_toc?.question_ids) {
+      ids.push(...m.tang_toc.question_ids);
+    }
     return Array.from(new Set(ids.filter(id => id)));
   };
 
   const getCompletionStats = (m: MatchMatrix) => {
-    const total = 78;
-    const filled = extractAllQuestionIds(m).length;
+    const total = 83;
+    let filled = extractAllQuestionIds(m).length;
+    if (m.vcnv?.package_id) {
+      filled += 1;
+    }
     const percentage = Math.round((filled / total) * 100);
     return { total, filled, percentage };
   };
@@ -268,10 +302,44 @@ export default function MatchManager({ user }: MatchManagerProps) {
       });
     });
 
+    // Vượt chướng ngại vật
+    if (match.matrix.vcnv?.package_id) {
+      const vpkg = vcnvPackages.find(p => p.id === match.matrix.vcnv?.package_id);
+      if (vpkg) {
+        exportData.push({
+          'Phần thi': 'Vượt chướng ngại vật',
+          'Vị trí': 'Từ khóa chủ đề',
+          'Lĩnh vực': vpkg.categories?.name || 'N/A',
+          'Mức độ': 'Chướng ngại vật',
+          'Nội dung câu hỏi': `TỪ KHÓA CHÍNH: ${vpkg.keyword}. Câu hỏi trung tâm: ${vpkg.central_question || ''}`,
+          'Đáp án': vpkg.central_answer || '',
+          'Link media': vpkg.image_url || vpkg.media_link || ''
+        });
+        vpkg.sub_questions.forEach((sq, idx) => {
+          exportData.push({
+            'Phần thi': 'Vượt chướng ngại vật',
+            'Vị trí': `Mảnh ghép ${idx + 1}`,
+            'Lĩnh vực': vpkg.categories?.name || 'N/A',
+            'Mức độ': 'Chướng ngại vật',
+            'Nội dung câu hỏi': sq.content,
+            'Đáp án': sq.answer,
+            'Link media': ''
+          });
+        });
+      }
+    }
+
+    // Tăng tốc
+    if (match.matrix.tang_toc?.question_ids) {
+      match.matrix.tang_toc.question_ids.forEach((qid, idx) => {
+        addQuestionToExport(qid, `Tăng tốc - Câu ${idx + 1}`);
+      });
+    }
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "NganHangCauHoi");
-    XLSX.writeFile(wb, `${match.name}_Full_78_Cau.xlsx`);
+    XLSX.writeFile(wb, `${match.name}_Full_83_Cau.xlsx`);
   };
 
   const openSelection = async (section: string, index: number, contestantIdx?: number) => {
@@ -294,6 +362,9 @@ export default function MatchManager({ user }: MatchManagerProps) {
       categoryId = matrix.ve_dich_full.contestants[contestantIdx!].category_ids[index];
       // 3x10, 3x20, 3x30
       difficulty = index < 3 ? '10 điểm' : index < 6 ? '20 điểm' : '30 điểm';
+    } else if (section === 'tang_toc') {
+      categoryId = matrix.tang_toc?.category_ids?.[index] || '';
+      difficulty = 'Tăng tốc';
     }
 
     try {
@@ -318,6 +389,11 @@ export default function MatchManager({ user }: MatchManagerProps) {
       newMatrix.ve_dich.question_ids[index] = q.id;
     } else if (section === 've_dich_full') {
       newMatrix.ve_dich_full.contestants[contestantIdx!].question_ids[index] = q.id;
+    } else if (section === 'tang_toc') {
+      if (!newMatrix.tang_toc) {
+        newMatrix.tang_toc = { question_ids: Array(4).fill(''), category_ids: Array(4).fill('') };
+      }
+      newMatrix.tang_toc.question_ids[index] = q.id;
     }
 
     setMatrix(newMatrix);
@@ -335,6 +411,11 @@ export default function MatchManager({ user }: MatchManagerProps) {
       newMatrix.ve_dich.category_ids[index] = catId;
     } else if (section === 've_dich_full') {
       newMatrix.ve_dich_full.contestants[contestantIdx!].category_ids[index] = catId;
+    } else if (section === 'tang_toc') {
+      if (!newMatrix.tang_toc) {
+        newMatrix.tang_toc = { question_ids: Array(4).fill(''), category_ids: Array(4).fill('') };
+      }
+      newMatrix.tang_toc.category_ids[index] = catId;
     }
     setMatrix(newMatrix);
   };
@@ -364,7 +445,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
                     />
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-accent-purple opacity-60">
-                    {getCompletionStats(matrix).filled}/78 câu hỏi đã chọn
+                    {getCompletionStats(matrix).filled}/{getCompletionStats(matrix).total} câu hỏi đã chọn
                   </span>
                 </div>
               </div>
@@ -494,10 +575,106 @@ export default function MatchManager({ user }: MatchManagerProps) {
             </div>
           </section>
 
+          {/* Section: Vuot Chuong Ngai Vat */}
+          <section className="bg-white p-8 rounded-3xl border border-pastel-purple-dark shadow-sm space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3 border-b border-pastel-purple-dark pb-4">
+              <div className="w-10 h-10 bg-purple-100 text-purple-700 rounded-xl flex items-center justify-center font-bold">2</div>
+              <h3 className="text-xl font-bold text-purple-700">Phần Vượt chướng ngại vật</h3>
+              <span className="text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60 ml-auto">1 bộ câu hỏi VCNV</span>
+            </div>
+            
+            <div className="space-y-4 max-w-xl">
+              <label className="text-xs font-bold uppercase tracking-widest text-accent-purple opacity-50 block">Chọn bộ câu hỏi Vượt chướng ngại vật</label>
+              <select
+                value={matrix.vcnv?.package_id || ''}
+                onChange={(e) => {
+                  const newMatrix = { ...matrix };
+                  if (!newMatrix.vcnv) {
+                    newMatrix.vcnv = { package_id: '' };
+                  }
+                  newMatrix.vcnv.package_id = e.target.value;
+                  setMatrix(newMatrix);
+                }}
+                className="w-full px-4 py-3 bg-pastel-purple/10 rounded-xl border border-pastel-purple-dark focus:ring-2 focus:ring-accent-purple outline-none text-sm text-[#1E293B]"
+              >
+                <option value="">-- Chưa chọn bộ câu hỏi --</option>
+                {vcnvPackages.map(pkg => (
+                  <option key={pkg.id} value={pkg.id}>
+                    {pkg.name} ({pkg.keyword} - {pkg.categories?.name || 'Chưa rõ'})
+                  </option>
+                ))}
+              </select>
+              
+              {matrix.vcnv?.package_id && (() => {
+                const selectedPkg = vcnvPackages.find(p => p.id === matrix.vcnv?.package_id);
+                if (!selectedPkg) return null;
+                return (
+                  <div className="p-4 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-2 text-xs text-[#1E293B]">
+                    <p><strong>Từ khóa hình ảnh:</strong> {selectedPkg.keyword}</p>
+                    <p><strong>Câu hỏi trung tâm:</strong> {selectedPkg.central_question} (Đáp án: {selectedPkg.central_answer})</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
+                      {selectedPkg.sub_questions.map((sq, sIdx) => (
+                        <div key={sIdx} className="p-2 bg-white rounded-lg border border-purple-100">
+                          <p className="font-bold text-purple-700 text-[10px]">Mảnh ghép {sIdx + 1}</p>
+                          <p className="line-clamp-2">{sq.content}</p>
+                          <p className="text-accent-blue font-serif italic mt-0.5">Đáp án: {sq.answer}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+
+          {/* Section: Tang Toc */}
+          <section className="bg-white p-8 rounded-3xl border border-pastel-purple-dark shadow-sm space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center gap-3 border-b border-pastel-purple-dark pb-4">
+              <div className="w-10 h-10 bg-orange-100 text-orange-700 rounded-xl flex items-center justify-center font-bold">3</div>
+              <h3 className="text-xl font-bold text-orange-700">Phần Tăng tốc</h3>
+              <span className="text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60 ml-auto">4 câu hỏi mức độ Tăng tốc</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, qIdx) => {
+                const catId = matrix.tang_toc?.category_ids?.[qIdx] || '';
+                const qid = matrix.tang_toc?.question_ids?.[qIdx] || '';
+                const q = questionsMap[qid];
+                return (
+                  <div key={qIdx} className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-accent-purple opacity-50 block">Câu {qIdx + 1}</label>
+                    <select 
+                      value={catId}
+                      onChange={(e) => updateMatrixCategory('tang_toc', qIdx, e.target.value)}
+                      className="w-full text-[10px] p-2 bg-pastel-purple/30 rounded-lg border border-pastel-purple-dark focus:ring-1 focus:ring-accent-purple outline-none"
+                    >
+                      <option value="">Lĩnh vực</option>
+                      {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                    </select>
+                    <button 
+                      onClick={() => openSelection('tang_toc', qIdx)}
+                      className={cn(
+                        "w-full py-2 px-2 rounded-lg text-[10px] font-bold border transition-all truncate",
+                        qid ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-pastel-purple-dark text-[#64748B] hover:border-accent-purple"
+                      )}
+                      title={qid ? q?.content : "Chọn câu"}
+                    >
+                      {qid ? (q?.content || "Đã chọn") : "Chọn câu"}
+                    </button>
+                    {qid && (
+                      <div className="text-[9px] text-[#64748B] italic mt-1 truncate px-1" title={q?.answer}>
+                        ĐA: {q?.answer || '...'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
           {/* Section: Ve Dich */}
           <section className="bg-white p-8 rounded-3xl border border-pastel-purple-dark shadow-sm space-y-6">
             <div className="flex items-center gap-3 border-b border-pastel-purple-dark pb-4">
-              <div className="w-10 h-10 bg-pastel-purple text-accent-purple rounded-xl flex items-center justify-center font-bold">2</div>
+              <div className="w-10 h-10 bg-pastel-purple text-accent-purple rounded-xl flex items-center justify-center font-bold">4</div>
               <h3 className="text-xl font-bold text-accent-purple">Phần Về đích</h3>
               <span className="text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60 ml-auto">6 câu hỏi mức 20 điểm</span>
             </div>
@@ -535,7 +712,7 @@ export default function MatchManager({ user }: MatchManagerProps) {
           {/* Section: Ve Dich Full */}
           <section className="bg-white p-8 rounded-3xl border border-pastel-purple-dark shadow-sm space-y-6">
             <div className="flex items-center gap-3 border-b border-pastel-purple-dark pb-4">
-              <div className="w-10 h-10 bg-red-100 text-red-700 rounded-xl flex items-center justify-center font-bold">3</div>
+              <div className="w-10 h-10 bg-red-100 text-red-700 rounded-xl flex items-center justify-center font-bold">5</div>
               <h3 className="text-xl font-bold text-red-700">Phần Về đích Full</h3>
               <span className="text-xs font-bold uppercase tracking-widest text-[#64748B] opacity-60 ml-auto">36 câu hỏi (10-20-10)</span>
             </div>

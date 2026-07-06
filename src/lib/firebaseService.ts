@@ -79,6 +79,13 @@ export interface MatchMatrix {
   ve_dich_full: {
     contestants: { contestant_id: number; question_ids: string[]; category_ids: string[] }[];
   };
+  vcnv?: {
+    package_id: string;
+  };
+  tang_toc?: {
+    question_ids: string[];
+    category_ids: string[];
+  };
 }
 
 export interface Notification {
