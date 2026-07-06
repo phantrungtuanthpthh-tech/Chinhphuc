@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase, type Profile } from '../lib/supabase';
+import { firebaseService, type Profile } from '../lib/firebaseService';
 import { X, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface ChangePasswordModalProps {
@@ -28,25 +28,16 @@ export default function ChangePasswordModal({ user, onClose }: ChangePasswordMod
 
     try {
       // Verify current password
-      const { data: profile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('password')
-        .eq('id', user.id)
-        .single();
+      const profile = await firebaseService.profiles.getById(user.id);
 
-      if (fetchError || !profile) throw new Error('Không tìm thấy thông tin người dùng.');
+      if (!profile) throw new Error('Không tìm thấy thông tin người dùng.');
       
       if (profile.password !== currentPassword) {
         throw new Error('Mật khẩu hiện tại không đúng.');
       }
 
       // Update password
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ password: newPassword })
-        .eq('id', user.id);
-
-      if (updateError) throw new Error('Lỗi khi cập nhật mật khẩu.');
+      await firebaseService.profiles.updatePassword(user.id, newPassword);
 
       setSuccess(true);
       setTimeout(() => {

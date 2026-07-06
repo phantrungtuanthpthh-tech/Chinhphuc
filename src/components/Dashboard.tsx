@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, type Profile, type Category, type Notification } from '../lib/supabase';
+import { firebaseService, type Profile, type Category, type Notification } from '../lib/firebaseService';
 import { 
   LayoutDashboard, 
   Database, 
@@ -58,14 +58,14 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   }, []);
 
   const fetchLatestNotification = async () => {
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    
-    if (data) setLatestNotification(data);
+    try {
+      const list = await firebaseService.notifications.getAll();
+      if (list && list.length > 0) {
+        setLatestNotification(list[0]);
+      }
+    } catch (err) {
+      console.error('Lỗi khi lấy thông báo mới nhất:', err);
+    }
   };
 
   const menuItems = [

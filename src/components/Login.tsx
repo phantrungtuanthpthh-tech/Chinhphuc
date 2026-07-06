@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase, type Profile } from '../lib/supabase';
+import { firebaseService, type Profile } from '../lib/firebaseService';
 import { LogIn, ShieldCheck } from 'lucide-react';
 
 interface LoginProps {
@@ -19,15 +19,10 @@ export default function Login({ onLogin }: LoginProps) {
 
     try {
       // Attempt normal login
-      const { data, error: loginError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .single();
+      const data = await firebaseService.profiles.authenticate(username.trim(), password);
 
-      if (!loginError && data) {
-        onLogin(data as Profile);
+      if (data) {
+        onLogin(data);
         return;
       }
 

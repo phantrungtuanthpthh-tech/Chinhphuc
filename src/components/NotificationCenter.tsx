@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, type Notification, type Profile } from '../lib/supabase';
+import { firebaseService, type Notification, type Profile } from '../lib/firebaseService';
 import { Plus, Trash2, Bell, ExternalLink, Send, X } from 'lucide-react';
 
 interface NotificationCenterProps {
@@ -18,8 +18,12 @@ export default function NotificationCenter({ user }: NotificationCenterProps) {
 
   const fetchNotifications = async () => {
     setLoading(true);
-    const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false });
-    if (data) setNotifications(data);
+    try {
+      const data = await firebaseService.notifications.getAll();
+      setNotifications(data);
+    } catch (err) {
+      console.error('Lỗi lấy thông báo:', err);
+    }
     setLoading(false);
   };
 
@@ -27,18 +31,24 @@ export default function NotificationCenter({ user }: NotificationCenterProps) {
     e.preventDefault();
     if (!formData.content.trim()) return;
 
-    const { error } = await supabase.from('notifications').insert([formData]);
-    if (!error) {
+    try {
+      await firebaseService.notifications.create(formData);
       setFormData({ content: '', link: '' });
       setIsModalOpen(false);
       fetchNotifications();
+    } catch (err) {
+      console.error('Lỗi gửi thông báo:', err);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa thông báo này?')) {
-      await supabase.from('notifications').delete().eq('id', id);
-      fetchNotifications();
+      try {
+        await firebaseService.notifications.delete(id);
+        fetchNotifications();
+      } catch (err) {
+        console.error('Lỗi xóa thông báo:', err);
+      }
     }
   };
 

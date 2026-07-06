@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, type Category, type Profile } from '../lib/supabase';
+import { firebaseService, type Category, type Profile } from '../lib/firebaseService';
 import { Plus, Trash2, Edit2, X, Check, AlertCircle } from 'lucide-react';
 
 interface CategoryManagerProps {
@@ -19,8 +19,12 @@ export default function CategoryManager({ user }: CategoryManagerProps) {
 
   const fetchCategories = async () => {
     setLoading(true);
-    const { data } = await supabase.from('categories').select('*').order('name');
-    if (data) setCategories(data);
+    try {
+      const data = await firebaseService.categories.getAll();
+      setCategories(data);
+    } catch (err) {
+      console.error('Lỗi khi lấy danh sách lĩnh vực:', err);
+    }
     setLoading(false);
   };
 
@@ -28,19 +32,23 @@ export default function CategoryManager({ user }: CategoryManagerProps) {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
     
-    const { error } = await supabase.from('categories').insert([{ name: newCategoryName.trim() }]);
-    if (!error) {
+    try {
+      await firebaseService.categories.create({ name: newCategoryName.trim() });
       setNewCategoryName('');
       fetchCategories();
+    } catch (err) {
+      console.error('Lỗi khi thêm lĩnh vực:', err);
     }
   };
 
   const handleUpdate = async (id: string) => {
     if (!editName.trim()) return;
-    const { error } = await supabase.from('categories').update({ name: editName.trim() }).eq('id', id);
-    if (!error) {
+    try {
+      await firebaseService.categories.update(id, { name: editName.trim() });
       setEditingId(null);
       fetchCategories();
+    } catch (err) {
+      console.error('Lỗi khi cập nhật lĩnh vực:', err);
     }
   };
 
@@ -51,16 +59,20 @@ export default function CategoryManager({ user }: CategoryManagerProps) {
     }
 
     if (confirm(`Bạn có chắc chắn muốn xóa lĩnh vực "${name}"? Tất cả câu hỏi thuộc lĩnh vực này sẽ được chuyển về "Hiểu biết chung".`)) {
-      // Find "Hiểu biết chung" ID
-      const hbc = categories.find(c => c.name === 'Hiểu biết chung');
-      if (hbc) {
-        // Update questions first
-        await supabase.from('questions').update({ category_id: hbc.id }).eq('category_id', id);
+      try {
+        // Find "Hiểu biết chung" ID
+        const hbc = categories.find(c => c.name === 'Hiểu biết chung');
+        if (hbc) {
+          // Update questions first
+          await firebaseService.questions.updateCategoryForQuestions(id, hbc.id);
+        }
+        
+        // Delete category
+        await firebaseService.categories.delete(id);
+        fetchCategories();
+      } catch (err) {
+        console.error('Lỗi khi xóa lĩnh vực:', err);
       }
-      
-      // Delete category
-      await supabase.from('categories').delete().eq('id', id);
-      fetchCategories();
     }
   };
 

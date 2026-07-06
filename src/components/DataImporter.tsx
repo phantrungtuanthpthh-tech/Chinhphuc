@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { firebaseService } from '../lib/firebaseService';
 import { Upload, CheckCircle2, AlertTriangle, RefreshCw, FileCode, Server, Database } from 'lucide-react';
 
 interface DataImporterProps {
@@ -62,12 +62,13 @@ export default function DataImporter({ user }: DataImporterProps) {
         const id = cleanItem.id || undefined;
         
         // Save to target collection
-        const { error } = await supabase.from(selectedTable).insert([cleanItem]);
-        if (error) {
+        try {
+          await firebaseService.importRecord(selectedTable, cleanItem);
+          successCount++;
+          setImportCount(successCount);
+        } catch (error: any) {
           throw new Error(`Lỗi ở dòng dữ liệu thứ ${successCount + 1}: ${error.message || error}`);
         }
-        successCount++;
-        setImportCount(successCount);
       }
 
       setStatus({ 
@@ -145,20 +146,35 @@ export default function DataImporter({ user }: DataImporterProps) {
       };
 
       // Seeding in order
-      const r1 = await supabase.from('categories').insert([sampleCategory]);
-      if (r1.error) throw new Error(`Lỗi khởi tạo 'categories': ${r1.error.message || r1.error}`);
+      try {
+        await firebaseService.categories.create(sampleCategory);
+      } catch (err: any) {
+        throw new Error(`Lỗi khởi tạo 'categories': ${err.message || err}`);
+      }
 
-      const r2 = await supabase.from('profiles').insert([sampleProfile]);
-      if (r2.error) throw new Error(`Lỗi khởi tạo 'profiles': ${r2.error.message || r2.error}`);
+      try {
+        await firebaseService.profiles.create(sampleProfile as any);
+      } catch (err: any) {
+        throw new Error(`Lỗi khởi tạo 'profiles': ${err.message || err}`);
+      }
 
-      const r3 = await supabase.from('questions').insert([sampleQuestion]);
-      if (r3.error) throw new Error(`Lỗi khởi tạo 'questions': ${r3.error.message || r3.error}`);
+      try {
+        await firebaseService.questions.create(sampleQuestion as any);
+      } catch (err: any) {
+        throw new Error(`Lỗi khởi tạo 'questions': ${err.message || err}`);
+      }
 
-      const r4 = await supabase.from('matches').insert([sampleMatch]);
-      if (r4.error) throw new Error(`Lỗi khởi tạo 'matches': ${r4.error.message || r4.error}`);
+      try {
+        await firebaseService.matches.create(sampleMatch);
+      } catch (err: any) {
+        throw new Error(`Lỗi khởi tạo 'matches': ${err.message || err}`);
+      }
 
-      const r5 = await supabase.from('notifications').insert([sampleNotification]);
-      if (r5.error) throw new Error(`Lỗi khởi tạo 'notifications': ${r5.error.message || r5.error}`);
+      try {
+        await firebaseService.notifications.create(sampleNotification);
+      } catch (err: any) {
+        throw new Error(`Lỗi khởi tạo 'notifications': ${err.message || err}`);
+      }
 
       setStatus({
         type: 'success',

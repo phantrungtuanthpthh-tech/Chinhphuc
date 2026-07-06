@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, uploadFile, type Question, type Category, type Profile } from '../lib/supabase';
+import { firebaseService, uploadFile, type Question, type Category, type Profile } from '../lib/firebaseService';
 import { 
   Plus, 
   Search, 
@@ -68,23 +68,21 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [qRes, cRes, mRes] = await Promise.all([
-      supabase.from('questions').select(`
-        *,
-        categories(name),
-        creator:profiles!created_by(full_name),
-        editor:profiles!last_edited_by(full_name)
-      `).order('created_at', { ascending: false }),
-      supabase.from('categories').select('*'),
-      supabase.from('matches').select('id, name, is_published')
-    ]);
-
-    if (qRes.data) setQuestions(qRes.data);
-    if (cRes.data) {
-      setCategories(cRes.data);
-      if (cRes.data.length > 0) setFormData(prev => ({ ...prev, category_id: cRes.data[0].id }));
+    try {
+      const [questionsData, categoriesData, matchesData] = await Promise.all([
+        firebaseService.questions.getAll(),
+        firebaseService.categories.getAll(),
+        firebaseService.matches.getMinimalList()
+      ]);
+      setQuestions(questionsData);
+      setCategories(categoriesData);
+      if (categoriesData.length > 0) {
+        setFormData(prev => ({ ...prev, category_id: categoriesData[0].id }));
+      }
+      setMatches(matchesData);
+    } catch (err) {
+      console.error('Lỗi khi tải dữ liệu ngân hàng câu hỏi:', err);
     }
-    if (mRes.data) setMatches(mRes.data);
     setLoading(false);
   };
 
@@ -111,10 +109,14 @@ export default function QuestionBank({ user }: QuestionBankProps) {
       created_by: editingQuestion ? editingQuestion.created_by : user.id
     };
 
-    if (editingQuestion) {
-      await supabase.from('questions').update(payload).eq('id', editingQuestion.id);
-    } else {
-      await supabase.from('questions').insert([payload]);
+    try {
+      if (editingQuestion) {
+        await firebaseService.questions.update(editingQuestion.id, payload as any);
+      } else {
+        await firebaseService.questions.create(payload as any);
+      }
+    } catch (err) {
+      console.error('Lỗi lưu câu hỏi:', err);
     }
 
     setIsModalOpen(false);
@@ -145,7 +147,11 @@ export default function QuestionBank({ user }: QuestionBankProps) {
 
   const confirmDelete = async () => {
     if (deleteConfirmId) {
-      await supabase.from('questions').delete().eq('id', deleteConfirmId);
+      try {
+        await firebaseService.questions.delete(deleteConfirmId);
+      } catch (err) {
+        console.error('Lỗi xóa câu hỏi:', err);
+      }
       setDeleteConfirmId(null);
       fetchData();
     }

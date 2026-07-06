@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, type Profile, type Role } from './lib/supabase';
+import { type Profile, type Role } from './lib/firebaseService';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 

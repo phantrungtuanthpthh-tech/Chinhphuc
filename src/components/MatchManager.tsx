@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, type Match, type Category, type Question, type Profile, type MatchMatrix } from '../lib/supabase';
+import { firebaseService, type Match, type Category, type Question, type Profile, type MatchMatrix } from '../lib/firebaseService';
 import { 
   Plus, 
   Trophy, 
@@ -82,12 +82,16 @@ export default function MatchManager({ user }: MatchManagerProps) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [mRes, cRes] = await Promise.all([
-      supabase.from('matches').select('*').order('created_at', { ascending: false }),
-      supabase.from('categories').select('*').order('name')
-    ]);
-    if (mRes.data) setMatches(mRes.data);
-    if (cRes.data) setCategories(cRes.data);
+    try {
+      const [matchesData, categoriesData] = await Promise.all([
+        firebaseService.matches.getAll(),
+        firebaseService.categories.getAll()
+      ]);
+      setMatches(matchesData);
+      setCategories(categoriesData);
+    } catch (err) {
+      console.error('Lỗi khi tải dữ liệu trận đấu:', err);
+    }
     setLoading(false);
   };
 
@@ -95,17 +99,16 @@ export default function MatchManager({ user }: MatchManagerProps) {
     const ids = extractAllQuestionIds(m);
     if (ids.length === 0) return;
 
-    const { data } = await supabase
-      .from('questions')
-      .select('*, categories(name)')
-      .in('id', ids);
-
-    if (data) {
+    try {
+      const allQuestions = await firebaseService.questions.getAll();
+      const filtered = allQuestions.filter(q => ids.includes(q.id));
       const map: Record<string, Question> = {};
-      data.forEach(q => {
+      filtered.forEach(q => {
         map[q.id] = q;
       });
       setQuestionsMap(prev => ({ ...prev, ...map }));
+    } catch (err) {
+      console.error('Lỗi lấy thông tin câu hỏi cho trận đấu:', err);
     }
   };
 
@@ -116,21 +119,22 @@ export default function MatchManager({ user }: MatchManagerProps) {
       return alert('Lỗi: Có câu hỏi trùng lặp trong phần Khởi động. Vui lòng kiểm tra lại các câu hỏi hiển thị chữ màu đỏ.');
     }
 
-    if (editingMatch) {
-      const { error } = await supabase.from('matches').update({
-        name: matchName,
-        matrix: matrix
-      }).eq('id', editingMatch.id);
-
-      if (error) return alert('Lỗi khi cập nhật trận đấu.');
-    } else {
-      const { error } = await supabase.from('matches').insert([{
-        name: matchName,
-        matrix: matrix,
-        is_published: false
-      }]);
-
-      if (error) return alert('Lỗi khi tạo trận đấu.');
+    try {
+      if (editingMatch) {
+        await firebaseService.matches.update(editingMatch.id, {
+          name: matchName,
+          matrix: matrix
+        });
+      } else {
+        await firebaseService.matches.create({
+          name: matchName,
+          matrix: matrix,
+          is_published: false,
+          created_at: new Date().toISOString()
+        } as any);
+      }
+    } catch (err: any) {
+      return alert('Lỗi khi lưu trận đấu: ' + err.message);
     }
     
     fetchData();
@@ -150,23 +154,28 @@ export default function MatchManager({ user }: MatchManagerProps) {
 
   const handleDeleteMatch = async (id: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa trận đấu này?')) {
-      await supabase.from('matches').delete().eq('id', id);
-      fetchData();
+      try {
+        await firebaseService.matches.delete(id);
+        fetchData();
+      } catch (err) {
+        console.error('Lỗi khi xóa trận đấu:', err);
+      }
     }
   };
 
   const togglePublish = async (match: Match) => {
     const newStatus = !match.is_published;
-    const { error } = await supabase.from('matches').update({ is_published: newStatus }).eq('id', match.id);
-    if (!error) {
+    try {
+      await firebaseService.matches.update(match.id, { is_published: newStatus });
       const questionIds = extractAllQuestionIds(match.matrix);
+      
       // If publishing, update questions with this match ID
       if (newStatus) {
         for (const qid of questionIds) {
           if (qid) {
-            const { data: q } = await supabase.from('questions').select('used_match_ids').eq('id', qid).single();
+            const q = await firebaseService.questions.getUsedMatches(qid);
             if (q && !q.used_match_ids.includes(match.id)) {
-              await supabase.from('questions').update({ used_match_ids: [...q.used_match_ids, match.id] }).eq('id', qid);
+              await firebaseService.questions.updateUsedMatches(qid, [...q.used_match_ids, match.id]);
             }
           }
         }
@@ -174,11 +183,9 @@ export default function MatchManager({ user }: MatchManagerProps) {
         // If unpublishing, remove this match ID from questions
         for (const qid of questionIds) {
           if (qid) {
-            const { data: q } = await supabase.from('questions').select('used_match_ids').eq('id', qid).single();
+            const q = await firebaseService.questions.getUsedMatches(qid);
             if (q && q.used_match_ids.includes(match.id)) {
-              await supabase.from('questions').update({ 
-                used_match_ids: q.used_match_ids.filter(id => id !== match.id) 
-              }).eq('id', qid);
+              await firebaseService.questions.updateUsedMatches(qid, q.used_match_ids.filter(id => id !== match.id));
             }
           }
         }
@@ -187,6 +194,8 @@ export default function MatchManager({ user }: MatchManagerProps) {
       if (editingMatch && editingMatch.id === match.id) {
         setEditingMatch({ ...editingMatch, is_published: newStatus });
       }
+    } catch (err) {
+      console.error('Lỗi khi thay đổi trạng thái xuất bản:', err);
     }
   };
 
@@ -208,10 +217,13 @@ export default function MatchManager({ user }: MatchManagerProps) {
 
   const handleExportExcel = async (match: Match) => {
     const ids = extractAllQuestionIds(match.matrix);
-    const { data: questions } = await supabase
-      .from('questions')
-      .select('*, categories(name)')
-      .in('id', ids);
+    let questions: Question[] = [];
+    try {
+      const all = await firebaseService.questions.getAll();
+      questions = all.filter(q => ids.includes(q.id));
+    } catch (err) {
+      console.error('Lỗi lấy câu hỏi xuất Excel:', err);
+    }
 
     const qMap: Record<string, Question> = {};
     questions?.forEach(q => { qMap[q.id] = q; });
@@ -284,12 +296,12 @@ export default function MatchManager({ user }: MatchManagerProps) {
       difficulty = index < 3 ? '10 điểm' : index < 6 ? '20 điểm' : '30 điểm';
     }
 
-    const query = supabase.from('questions').select('*');
-    if (categoryId) query.eq('category_id', categoryId);
-    if (difficulty) query.eq('difficulty', difficulty);
-
-    const { data } = await query;
-    if (data) setSelectionQuestions(data);
+    try {
+      const filtered = await firebaseService.questions.filter(categoryId, difficulty);
+      setSelectionQuestions(filtered);
+    } catch (err) {
+      console.error('Lỗi lọc câu hỏi chọn vị trí:', err);
+    }
     setSelectionLoading(false);
   };
 

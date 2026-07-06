@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, type Profile, type Role, type Category } from '../lib/supabase';
+import { firebaseService, type Profile, type Role, type Category } from '../lib/firebaseService';
 import { Plus, Trash2, Edit2, X, Check, Shield, User, Mail, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -29,21 +29,29 @@ export default function UserManager({ user }: UserManagerProps) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [uRes, cRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('role'),
-      supabase.from('categories').select('*').order('name')
-    ]);
-    if (uRes.data) setUsers(uRes.data);
-    if (cRes.data) setCategories(cRes.data);
+    try {
+      const [uRes, cRes] = await Promise.all([
+        firebaseService.profiles.getAll(),
+        firebaseService.categories.getAll()
+      ]);
+      setUsers(uRes);
+      setCategories(cRes);
+    } catch (err) {
+      console.error('Lỗi khi lấy dữ liệu ban biên tập:', err);
+    }
     setLoading(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingUser) {
-      await supabase.from('profiles').update(formData).eq('id', editingUser.id);
-    } else {
-      await supabase.from('profiles').insert([formData]);
+    try {
+      if (editingUser) {
+        await firebaseService.profiles.update(editingUser.id, formData);
+      } else {
+        await firebaseService.profiles.create(formData);
+      }
+    } catch (err) {
+      console.error('Lỗi lưu thông tin tài khoản:', err);
     }
     setIsModalOpen(false);
     setEditingUser(null);
@@ -54,8 +62,12 @@ export default function UserManager({ user }: UserManagerProps) {
   const handleDelete = async (id: string, name: string) => {
     if (id === user.id) return alert('Bạn không thể tự xóa chính mình.');
     if (confirm(`Bạn có chắc chắn muốn xóa người dùng "${name}"?`)) {
-      await supabase.from('profiles').delete().eq('id', id);
-      fetchData();
+      try {
+        await firebaseService.profiles.delete(id);
+        fetchData();
+      } catch (err) {
+        console.error('Lỗi xóa tài khoản:', err);
+      }
     }
   };
 
